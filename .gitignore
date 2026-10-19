@@ -1,0 +1,25 @@
+# Bí mật: mọi file .env*, trừ file mẫu
+.env
+.env.*
+!.env.example
+!.env.cloud.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Dữ liệu sinh ra
+data/processed/cache/
+data/processed/*.npy
+db/volumes/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local

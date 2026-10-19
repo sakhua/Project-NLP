@@ -1,0 +1,3 @@
+# Môi trường đầy đủ trên máy của nhóm (môn NLP + chạy thử backend).
+# Danh sách thư viện nằm trong pyproject.toml; dòng dưới cài gói graphrag ở chế độ sửa trực tiếp (-e).
+-e .[api,ml,parse,eval,demo,dev]

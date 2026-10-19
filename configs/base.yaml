@@ -1,0 +1,43 @@
+# Tham số chung cho mọi môi trường. Ghi đè theo môi trường trong local.yaml / cloud.yaml.
+# Giá trị bí mật (mật khẩu, OPENROUTER_API_KEY) KHÔNG đặt ở đây mà lấy từ .env hoặc biến môi trường.
+# Mọi mô hình gọi qua OpenRouter: đổi mô hình chỉ cần sửa tên (xem danh sách tại openrouter.ai/models).
+paths:
+  raw: data/raw
+  processed: data/processed
+  eval: data/eval
+  manifest: data/manifest.csv
+
+embedding:
+  provider: openrouter        # openrouter | local (sentence-transformers trên máy)
+  model: baai/bge-m3          # 1024 chiều, đa ngôn ngữ; cột don_vi.embedding
+  dim: 1024
+  batch_size: 64
+
+reranker:
+  enabled: true
+  provider: openrouter        # openrouter | local
+  model: cohere/rerank-v3.5   # thay thế: cohere/rerank-4-fast, qwen/qwen3-reranker-4b, voyageai/rerank-2.5
+
+llm:
+  provider: openrouter
+  model: openai/gpt-4o-mini   # mô hình sinh câu trả lời, dùng chung cho B1–B3 và GraphRAG
+  temperature: 0.0
+  max_tokens: 1024
+
+retrieval:
+  top_k_bm25: 50
+  top_k_dense: 50
+  rrf_k: 60          # hằng số k của Reciprocal Rank Fusion
+  top_k_rerank: 30   # số ứng viên đưa vào rerank sau RRF
+  top_k_final: 10    # số đơn vị giữ lại sau rerank
+
+graph:
+  hops: 1            # số bước mở rộng (thử 1 và 2 trong ablation)
+  edge_types: [THAM_CHIEU, HUONG_DAN, THUOC]
+  version_edges: [SUA_DOI, BO_SUNG, THAY_THE]
+  max_version_depth: 3
+
+evaluation:
+  ks: [5, 10]
+  judge_model: openai/gpt-4o  # LLM-judge nên mạnh hơn mô hình được chấm
+  judge_sample_for_kappa: 40

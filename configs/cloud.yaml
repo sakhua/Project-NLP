@@ -1,0 +1,6 @@
+# Môi trường "cloud" – bản triển khai trên Render (gói miễn phí 512 MB RAM). Chọn bằng APP_ENV=cloud.
+# Dùng CÙNG mô hình với local (mọi mô hình gọi qua OpenRouter, không chạy trên máy chủ),
+# chỉ khác kết nối: Supabase + AuraDB, lấy từ .env.cloud (khi chạy trên máy) hoặc biến môi trường trên Render.
+# Không được đặt provider: local ở đây (không đủ RAM).
+llm:
+  max_tokens: 800    # giới hạn độ dài câu trả lời để kiểm soát chi phí khi công khai

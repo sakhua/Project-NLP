@@ -1,0 +1,38 @@
+# Gói Python "graphrag": lõi dùng chung cho môn NLP (chạy trên máy) và backend trên cloud.
+# Cài theo nhóm thư viện (extras) để image cloud không phải kéo theo torch:
+#   máy của nhóm (môn NLP):  pip install -r requirements.txt     (= mọi nhóm)
+#   image backend (cloud):   pip install ".[api]"                 (xem backend/Dockerfile)
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphrag-luat-giao-thong"
+version = "0.1.0"
+description = "Hỏi đáp pháp luật giao thông đường bộ Việt Nam dựa trên GraphRAG"
+requires-python = ">=3.10"
+dependencies = [
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+  "numpy>=1.26",
+  "psycopg[binary,pool]>=3.1",
+  "pgvector>=0.2.5",
+  "neo4j>=5.20",
+  "rank-bm25>=0.2.2",
+  "pyvi>=0.1.1",
+  "httpx>=0.27",                # gọi OpenRouter: LLM, embedding, rerank
+]
+
+[project.optional-dependencies]
+api   = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]                       # backend
+ml    = ["sentence-transformers>=3.0"]                                       # bge-m3, reranker chạy trên máy (tùy chọn)
+parse = ["python-docx>=1.1", "regex>=2024.0"]                                # đọc .docx
+eval  = ["ranx>=0.3.19", "scikit-learn>=1.4", "statsmodels>=0.14", "pandas>=2.2"]
+demo  = ["streamlit>=1.36"]                                                  # scripts/streamlit_demo.py
+dev   = ["pytest>=8.0", "httpx>=0.27", "python-docx>=1.1"]
+
+[tool.setuptools.packages.find]
+include = ["graphrag*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

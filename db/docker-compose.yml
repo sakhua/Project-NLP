@@ -1,0 +1,47 @@
+# Cơ sở dữ liệu cho môi trường LOCAL (máy của nhóm). Trên cloud thay bằng Supabase + AuraDB.
+# Khởi động (từ thư mục gốc project):  docker compose -f db/docker-compose.yml --env-file .env up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: graphrag_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-luat_gt}
+      POSTGRES_USER: ${POSTGRES_USER:-graphrag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-doi_mat_khau}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: graphrag_neo4j
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-doi_mat_khau}
+    ports:
+      - "7474:7474"   # Neo4j Browser: http://localhost:7474
+      - "7687:7687"   # Bolt
+    volumes:
+      - ./volumes/neo4j:/data
+
+  # Chạy thử image backend giống hệt trên Render (tùy chọn):
+  #   docker compose -f db/docker-compose.yml --profile api up -d --build
+  # Cần file .env.cloud (lấy OPENROUTER_API_KEY); DB trỏ tới 2 dịch vụ ở trên.
+  backend:
+    profiles: ["api"]
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: ../.env.cloud      # lấy OPENROUTER_API_KEY, ADMIN_PASSWORD
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-graphrag}:${POSTGRES_PASSWORD:-doi_mat_khau}@postgres:5432/${POSTGRES_DB:-luat_gt}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-doi_mat_khau}
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on: [postgres, neo4j]

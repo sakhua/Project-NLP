@@ -1,0 +1,15 @@
+# Chỉ đưa vào image những gì backend cần (graphrag/, configs/, backend/, pyproject.toml)
+.git
+.github
+.venv
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+data/
+notebooks/
+docs/
+tests/
+scripts/
+frontend/
+db/volumes/

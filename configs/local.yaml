@@ -1,0 +1,10 @@
+# Môi trường "local" – máy của nhóm, dùng cho môn NLP (chạy đánh giá). Chọn bằng APP_ENV=local (mặc định).
+# Kết nối DB (PostgreSQL, Neo4j trong Docker) lấy từ file .env.
+# Mô hình lấy từ base.yaml (OpenRouter). Muốn chạy bge-m3 / bge-reranker trên máy có GPU thì bỏ dấu # dưới đây:
+# embedding:
+#   provider: local
+#   local_model: BAAI/bge-m3
+# reranker:
+#   provider: local
+#   local_model: BAAI/bge-reranker-v2-m3
+{}
