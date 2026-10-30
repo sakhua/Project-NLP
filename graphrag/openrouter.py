@@ -9,7 +9,9 @@ Nên đặt hạn mức chi tiêu (credit limit) cho API key trong trang quản 
 """
 from __future__ import annotations
 
+import json
 import time
+from collections.abc import Iterator
 
 import httpx
 
@@ -51,6 +53,36 @@ class OpenRouter:
             body["max_tokens"] = max_tokens
         data = self._post("/chat/completions", body)
         return data["choices"][0]["message"]["content"] or ""
+
+    def chat_stream(self, model: str, system: str, user: str, temperature: float = 0.0,
+                    max_tokens: int | None = None) -> Iterator[str]:
+        """Như chat() nhưng trả về từng đoạn chữ ngay khi mô hình sinh ra (giao diện hiện chữ chạy dần)."""
+        body = {"model": model, "temperature": temperature, "stream": True,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if max_tokens:
+            body["max_tokens"] = max_tokens
+        for attempt in range(self.max_retries + 1):
+            with self.http.stream("POST", "/chat/completions", json=body) as r:
+                if r.status_code in RETRY_STATUS and attempt < self.max_retries:
+                    r.read()
+                    time.sleep(self.backoff * 2 ** attempt)
+                    continue
+                if r.status_code >= 400:
+                    raise OpenRouterError(f"/chat/completions lỗi {r.status_code}: {r.read().decode()[:300]}")
+                for line in r.iter_lines():
+                    if not line.startswith("data:"):
+                        continue                  # dòng trống hoặc chú thích ": OPENROUTER PROCESSING"
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        return
+                    chunk = json.loads(data)
+                    if "error" in chunk:
+                        raise OpenRouterError(f"/chat/completions lỗi: {chunk['error']}")
+                    delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
+                    if delta:
+                        yield delta
+                return
+        raise OpenRouterError("/chat/completions: hết số lần thử lại")
 
     def embed(self, model: str, texts: list[str]) -> list[list[float]]:
         data = self._post("/embeddings", {"model": model, "input": texts})

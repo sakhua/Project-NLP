@@ -33,9 +33,12 @@ retrieval:
 
 graph:
   hops: 1            # số bước mở rộng (thử 1 và 2 trong ablation)
-  edge_types: [THAM_CHIEU, HUONG_DAN, THUOC]
-  version_edges: [SUA_DOI, BO_SUNG, THAY_THE]
-  max_version_depth: 3
+  edge_types: [THAM_CHIEU, HUONG_DAN, THUOC]   # cạnh dùng để mở rộng (cả hai chiều), xem docs/thiet_ke_do_thi.md
+  max_expand: 30     # số đơn vị tối đa thêm vào từ đồ thị (ưu tiên theo điểm của seed)
+  # Không mở rộng theo cạnh sửa đổi: phiên bản sau sửa đổi lấy từ PostgreSQL theo ngày áp dụng
+
+conversation:
+  history_turns: 3   # số lượt hỏi đáp gần nhất dùng để hiểu câu hỏi tiếp nối ("còn xe máy thì sao?")
 
 evaluation:
   ks: [5, 10]

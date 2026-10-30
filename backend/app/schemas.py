@@ -2,29 +2,35 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=6000)
+
+
 class AskRequest(BaseModel):
-    question: str = Field(min_length=5, max_length=1000, examples=["Ô tô vượt đèn đỏ bị phạt bao nhiêu?"])
+    question: str = Field(min_length=3, max_length=1000, examples=["Ô tô vượt đèn đỏ bị phạt bao nhiêu?"])
     date: dt.date | None = Field(default=None, description="Ngày áp dụng; bỏ trống = hôm nay")
-
-
-class Unit(BaseModel):
-    id: str
-    noi_dung: str
-    tieu_de: str | None = None
-    hieu_luc_tu: dt.date | None = None
-    hieu_luc_den: dt.date | None = None
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12,
+                                    description="Các lượt trước trong cuộc trò chuyện (để hiểu câu hỏi tiếp nối)")
 
 
 class AskResponse(BaseModel):
     log_id: int | None
+    question: str
+    question_rewritten: str | None = None
+    date: dt.date
     answer: str
     citations: list[str]
-    units: list[Unit]
-    date: dt.date
+    unknown_citations: list[str] = []
+    units: list[dict[str, Any]]
+    graph: dict[str, Any]
+    notes: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
     latency_ms: int
 
 

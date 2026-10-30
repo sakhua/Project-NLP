@@ -28,6 +28,13 @@ def main(paths: list[str]) -> int:
     for line in open(ROOT / "data/processed/corpus.jsonl", encoding="utf-8"):
         u = json.loads(line)
         corpus[u["id"]] = u
+    # Phiên bản sau sửa đổi (bước 2): thêm mã mới do văn bản sửa đổi bổ sung, và nội dung các phiên bản
+    versions: dict[str, list[dict]] = {}
+    vpath = ROOT / "data/processed/versions.jsonl"
+    if vpath.exists():
+        for line in open(vpath, encoding="utf-8"):
+            r = json.loads(line)
+            versions.setdefault(r["id"], []).append(r)
     qs, loi, canh_bao = [], [], []
     for p in paths:
         for i, line in enumerate(open(p, encoding="utf-8-sig"), 1):
@@ -67,13 +74,26 @@ def main(paths: list[str]) -> int:
         gold = q.get("gold_ids") or []
         if not gold:
             loi.append(f"{v}: gold_ids rỗng")
-        thieu = [g for g in gold if g not in corpus]
-        if thieu:
+        nsd = q.get("nguon_sua_doi") or []
+        if not isinstance(nsd, list):
+            loi.append(f"{v}: nguon_sua_doi phải là danh sách mã")
+            nsd = []
+        for g in nsd:
+            if g not in corpus:
+                loi.append(f"{v}: nguon_sua_doi có mã không có trong corpus: {g}")
+            elif g in gold:
+                canh_bao.append(f"{v}: {g} là mã văn bản sửa đổi, ghi ở nguon_sua_doi chứ không ghi ở gold_ids")
+        thieu = [g for g in gold if g not in corpus and g not in versions]
+        if thieu and nsd:
+            canh_bao.append(f"{v}: mã chưa có trong corpus (chấp nhận nếu là khoản/điểm được bổ sung mới): {thieu}")
+        elif thieu:
             loi.append(f"{v}: mã không có trong corpus: {thieu}")
         if RE_SO_DIEU.search(q.get("cau_hoi", "")):
             canh_bao.append(f"{v}: câu hỏi có nhắc số điều/khoản/điểm")
         # số tiền phải xuất hiện trong nội dung các gold
-        text = " ".join(corpus[g]["ngu_canh"] + " " + corpus[g]["noi_dung"] for g in gold if g in corpus)
+        phan = [corpus[g] for g in gold + nsd if g in corpus]
+        phan += [r for g in gold for r in versions.get(g, [])]
+        text = " ".join((u.get("ngu_canh") or "") + " " + u["noi_dung"] for u in phan)
         so_trong_vb = {int(x.replace(".", "")) for x in re.findall(r"\d{1,3}(?:\.\d{3})+", text)}
         for t in q.get("so_tien", []) if isinstance(q.get("so_tien"), list) else []:
             if isinstance(t, int) and t not in so_trong_vb:

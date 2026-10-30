@@ -1,0 +1,92 @@
+[
+  {
+    "id": "D1", "nhom": "Mức phạt cơ bản",
+    "cau_hoi": "Ô tô vượt đèn đỏ bị phạt bao nhiêu tiền?",
+    "ngay": null,
+    "can_trich_dan": ["ND168_2024.D6.K9.b"],
+    "can_co_trong_ngu_canh": ["ND168_2024.D6.K16.b"],
+    "dap_an_co": ["18.000.000", "20.000.000"],
+    "dap_an_dung": "Phạt tiền 18.000.000 – 20.000.000 đồng (điểm b khoản 9 Điều 6 NĐ 168/2024); bị trừ 04 điểm giấy phép lái xe (điểm b khoản 16 Điều 6)."
+  },
+  {
+    "id": "D2", "nhom": "Hội thoại nhiều lượt", "tiep_theo": "D1",
+    "cau_hoi": "Còn xe máy thì sao?",
+    "ngay": null,
+    "can_trich_dan": ["ND168_2024.D7.K7.c"],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["4.000.000", "6.000.000"],
+    "dap_an_dung": "Xe mô tô, xe gắn máy không chấp hành đèn tín hiệu: phạt 4.000.000 – 6.000.000 đồng (điểm c khoản 7 Điều 7 NĐ 168/2024); trừ 04 điểm (điểm b khoản 13 Điều 7)."
+  },
+  {
+    "id": "D3", "nhom": "Đồ thị: dẫn chiếu ngược",
+    "cau_hoi": "Lái ô tô vượt đèn đỏ có bị trừ điểm giấy phép lái xe không?",
+    "ngay": null,
+    "can_trich_dan": ["ND168_2024.D6.K16.b"],
+    "can_co_trong_ngu_canh": ["ND168_2024.D6.K9.b"],
+    "dap_an_co": ["04 điểm"],
+    "dap_an_dung": "Có, trừ 04 điểm (điểm b khoản 16 Điều 6 dẫn chiếu tới điểm b khoản 9 Điều 6 NĐ 168/2024)."
+  },
+  {
+    "id": "D4", "nhom": "Hiệu lực theo ngày (1/3): trước khi có hiệu lực",
+    "cau_hoi": "Chở trẻ em dưới 10 tuổi ngồi ghế trước ô tô bị xử phạt thế nào?",
+    "ngay": "2025-10-01",
+    "can_trich_dan": [],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["01/01/2026"],
+    "dap_an_dung": "Tại 01/10/2025, điểm m khoản 3 Điều 6 NĐ 168/2024 CHƯA có hiệu lực (có hiệu lực từ 01/01/2026), nên chưa bị xử phạt theo quy định này."
+  },
+  {
+    "id": "D5", "nhom": "Hiệu lực theo ngày (2/3): bản gốc",
+    "cau_hoi": "Chở trẻ em dưới 10 tuổi ngồi ghế trước ô tô bị xử phạt thế nào?",
+    "ngay": "2026-03-01",
+    "can_trich_dan": ["ND168_2024.D6.K3.m"],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["800.000", "1.000.000"],
+    "dap_an_dung": "Phạt 800.000 – 1.000.000 đồng theo điểm m khoản 3 Điều 6 NĐ 168/2024 (bản gốc: gồm cả việc ngồi cùng hàng ghế người lái và không dùng thiết bị an toàn cho trẻ em)."
+  },
+  {
+    "id": "D6", "nhom": "Hiệu lực theo ngày (3/3): sau khi NĐ 238 sửa đổi",
+    "cau_hoi": "Chở trẻ em dưới 10 tuổi ngồi ghế trước ô tô bị xử phạt thế nào?",
+    "ngay": "2026-09-01",
+    "can_trich_dan": ["ND168_2024.D6.K3.m"],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["800.000", "1.000.000", "sửa đổi"],
+    "dap_an_dung": "Vẫn phạt 800.000 – 1.000.000 đồng nhưng theo điểm m đã được khoản 2 Điều 2 NĐ 238/2026 sửa đổi (chỉ còn hành vi cho trẻ ngồi cùng hàng ghế người lái). Không dùng thiết bị an toàn cho trẻ em chuyển sang khoản 1a mới: phạt cảnh cáo."
+  },
+  {
+    "id": "D7", "nhom": "Đồ thị: hình thức xử phạt bổ sung",
+    "cau_hoi": "Lái ô tô mà nồng độ cồn vượt quá 0,4 miligam/1 lít khí thở bị xử phạt thế nào?",
+    "ngay": null,
+    "can_trich_dan": ["ND168_2024.D6.K11.a"],
+    "can_co_trong_ngu_canh": ["ND168_2024.D6.K15.c"],
+    "dap_an_co": ["30.000.000", "40.000.000", "22 tháng"],
+    "dap_an_dung": "Phạt 30.000.000 – 40.000.000 đồng (điểm a khoản 11 Điều 6) và tước quyền sử dụng giấy phép lái xe 22 – 24 tháng (điểm c khoản 15 Điều 6 NĐ 168/2024)."
+  },
+  {
+    "id": "D8", "nhom": "Nhiều bước: tốc độ (câu khó)",
+    "cau_hoi": "Ô tô con chạy 75 km/h trên đường đôi trong khu đông dân cư thì bị phạt thế nào?",
+    "ngay": null,
+    "can_trich_dan": ["TT38_2024.D6.K1", "ND168_2024.D6.K5.đ"],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["60", "4.000.000", "6.000.000"],
+    "dap_an_dung": "Tốc độ tối đa 60 km/h (khoản 1 Điều 6 TT 38/2024) → vượt 15 km/h → phạt 4.000.000 – 6.000.000 đồng (điểm đ khoản 5 Điều 6 NĐ 168/2024), trừ 02 điểm (điểm a khoản 16 Điều 6)."
+  },
+  {
+    "id": "D9", "nhom": "Thủ tục: phục hồi điểm",
+    "cau_hoi": "Giấy phép lái xe bị trừ hết điểm thì làm thế nào để được phục hồi?",
+    "ngay": null,
+    "can_trich_dan": ["L36_2024.D58.K3"],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["06 tháng", "12 điểm"],
+    "dap_an_dung": "Sau ít nhất 06 tháng kể từ ngày bị trừ hết điểm, tham gia kiểm tra kiến thức pháp luật về TTATGT do Cảnh sát giao thông tổ chức; đạt yêu cầu thì được phục hồi đủ 12 điểm (khoản 3 Điều 58 Luật 36/2024)."
+  },
+  {
+    "id": "D10", "nhom": "Ngoài phạm vi: không bịa",
+    "cau_hoi": "Thủ tục đăng ký kết hôn cần những giấy tờ gì?",
+    "ngay": null,
+    "can_trich_dan": [],
+    "can_co_trong_ngu_canh": [],
+    "dap_an_co": ["Không tìm thấy quy định"],
+    "dap_an_dung": "Không tìm thấy quy định áp dụng trong các văn bản được cung cấp."
+  }
+]

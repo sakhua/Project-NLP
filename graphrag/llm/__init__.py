@@ -9,6 +9,10 @@ class LLM:
     def generate(self, system: str, user: str) -> str:
         return self.client.chat(self.model, system, user, self.temperature, self.max_tokens)
 
+    def generate_stream(self, system: str, user: str):
+        """Sinh câu trả lời theo từng đoạn chữ (dùng cho /api/ask/stream)."""
+        yield from self.client.chat_stream(self.model, system, user, self.temperature, self.max_tokens)
+
 
 def get_llm(cfg: dict, role: str = "answer") -> LLM:
     """role='answer' dùng llm.model; role='judge' dùng evaluation.judge_model."""

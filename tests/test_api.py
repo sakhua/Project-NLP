@@ -9,9 +9,6 @@ def test_health_and_not_ready_endpoints():
         r = client.get("/health")
         assert r.status_code == 200 and r.json()["status"] == "ok"
 
-        r = client.post("/api/ask", json={"question": "Ô tô vượt đèn đỏ bị phạt bao nhiêu?"})
-        assert r.status_code == 501          # pipeline GraphRAG chưa hoàn thiện
-
         r = client.post("/api/ask", json={"question": "?"})
         assert r.status_code == 422          # câu hỏi quá ngắn
 
@@ -28,3 +25,39 @@ def test_config_profiles():
         assert c["reranker"]["provider"] == "openrouter" and c["llm"]["provider"] == "openrouter"
     assert local["retrieval"] == cloud["retrieval"]
     assert cloud["llm"]["max_tokens"] == 800
+
+
+def test_ask_stream_ndjson(monkeypatch):
+    import json
+
+    from graphrag.pipeline import graph_rag
+
+    def fake_run(res, question, ngay=None, history=None, stream=False, **kw):
+        assert history == [{"role": "user", "content": "Ô tô vượt đèn đỏ?"}]
+        yield {"type": "step", "key": "search", "label": "x", "ms": 1, "detail": "d"}
+        yield {"type": "token", "text": "Phạt "}
+        yield {"type": "done", "answer": "Phạt", "citations": [], "units": [], "graph": {"nodes": [], "edges": []}}
+
+    monkeypatch.setattr(graph_rag, "run", fake_run)
+    with TestClient(app) as client:
+        r = client.post("/api/ask/stream", json={"question": "Còn xe máy thì sao?", "date": "2026-09-01",
+                                                 "history": [{"role": "user", "content": "Ô tô vượt đèn đỏ?"}]})
+        lines = [json.loads(x) for x in r.text.splitlines()]
+        assert [e["type"] for e in lines] == ["step", "token", "done"]
+        assert "latency_ms" in lines[-1] and "log_id" in lines[-1]
+
+
+def test_ask_stream_reports_error(monkeypatch):
+    import json
+
+    from graphrag.pipeline import graph_rag
+
+    def broken(*a, **k):
+        raise ConnectionError("connection refused")
+        yield  # noqa
+
+    monkeypatch.setattr(graph_rag, "run", broken)
+    with TestClient(app) as client:
+        r = client.post("/api/ask/stream", json={"question": "Ô tô vượt đèn đỏ?"})
+        ev = json.loads(r.text.splitlines()[-1])
+        assert ev["type"] == "error" and "Docker" in ev["message"]

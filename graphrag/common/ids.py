@@ -4,6 +4,11 @@ Quy ước: <MaVanBan>.D<số điều>[.K<số khoản>[.<điểm>]]
 Ví dụ:   L36_2024.D10        ND168_2024.D6.K5      ND168_2024.D6.K5.a
 Chương:  <MaVanBan>.C<số chương, chữ số Ả Rập>   ví dụ ND168_2024.C2
          (mã Điều không chứa Chương vì số Điều đã duy nhất trong một văn bản)
+Chèn:    văn bản sửa đổi có thể chèn Điều/Khoản/Điểm mới: D25a, K1a, K9a, điểm k1
+
+Mã phiên bản (vid) = <mã đơn vị>@<hiệu lực từ>, ví dụ ND168_2024.D6.K3.m@2026-08-15.
+Mỗi Điều/Khoản/Điểm có thể có nhiều phiên bản (bản gốc và các bản sau sửa đổi), cùng một mã đơn vị;
+xem docs/thiet_ke_do_thi.md. Trích dẫn và gold luôn dùng mã đơn vị, không dùng vid.
 """
 from __future__ import annotations
 
@@ -13,7 +18,7 @@ from dataclasses import dataclass
 _ID_RE = re.compile(
     r"^(?P<doc>[A-Z]+\d+_\d{4})"
     r"(?:\.C(?P<chuong>\d+)"
-    r"|(?:\.D(?P<dieu>\d+[a-z]?))?(?:\.K(?P<khoan>\d+[a-z]?))?(?:\.(?P<diem>[a-zđ]))?)$"
+    r"|(?:\.D(?P<dieu>\d+[a-z]?))?(?:\.K(?P<khoan>\d+[a-z]?))?(?:\.(?P<diem>[a-zđ]\d?))?)$"
 )
 
 _ROMAN = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
@@ -95,3 +100,14 @@ def parse_id(uid: str) -> UnitId:
     if not m:
         raise ValueError(f"Mã định danh không hợp lệ: {uid}")
     return UnitId(m["doc"], m["dieu"], m["khoan"], m["diem"], m["chuong"])
+
+
+def make_vid(uid: str, hieu_luc_tu) -> str:
+    """Mã phiên bản: 'ND168_2024.D6.K3.m' + 2026-08-15 -> 'ND168_2024.D6.K3.m@2026-08-15'."""
+    d = hieu_luc_tu.isoformat() if hasattr(hieu_luc_tu, "isoformat") else str(hieu_luc_tu)
+    return f"{uid}@{d}"
+
+
+def base_id(x: str) -> str:
+    """Bỏ phần '@ngày' nếu có: nhận mã đơn vị hoặc mã phiên bản, trả mã đơn vị."""
+    return x.split("@", 1)[0]

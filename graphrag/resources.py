@@ -44,7 +44,7 @@ class Resources:
 
     @cached_property
     def bm25(self):
-        """Dựng chỉ mục BM25 từ bảng don_vi (vài nghìn đơn vị, mất vài giây)."""
+        """Dựng chỉ mục BM25 từ bảng don_vi (vài nghìn phiên bản, mất vài giây). search() trả về vid."""
         from graphrag.retrieval.bm25 import BM25Index
         from graphrag.storage.postgres import all_unit_texts
 

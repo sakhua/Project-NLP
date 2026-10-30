@@ -7,10 +7,11 @@ Che API key, mật khẩu, chuỗi kết nối trước khi lưu vào đây.
 
 | Tiền tố | Bước | Người chụp |
 |---|---|---|
+| `A2_` | Giao diện sau khi đăng nhập: dashboard Render, menu New, Supabase, Aura console, OpenRouter Keys (mục 2 báo cáo) | TV1 |
 | `B1_` | GitHub: repo, cấu trúc thư mục, collaborator | TV1 |
 | `B2_` | Supabase: tạo project, bật extension vector, Table Editor, Connect (pooler) | TV2 |
 | `B3_` | AuraDB: tạo instance Free, Running, chạy ràng buộc | TV2 |
-| `B4_` | Google AI Studio: trang API keys (che key), giới hạn sử dụng | TV1 |
+| `B4_` | OpenRouter: trang Keys (che key), hạn mức chi tiêu của key | TV1 |
 | `B5_` | Nạp dữ liệu: terminal `scripts/04_load.py --env cloud`, bảng don_vi, đồ thị trong Aura | TV2 |
 | `B6_` | Render Web Service: cấu hình, Environment, log build, `/health`, `/health/db`, `/docs` | TV1 |
 | `B7_` | Render Static Site: cấu hình, log build, trang chủ | TV3 |

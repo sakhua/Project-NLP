@@ -1,8 +1,9 @@
 """Bước 3: tính embedding cho toàn bộ corpus, lưu ra file để bước 4 nạp vào DB.
 
 Phụ trách: TV3.   Chạy: python scripts/03_embed.py
-Mặc định gọi baai/bge-m3 qua OpenRouter (configs/base.yaml) → data/processed/embedding.npy (+ embedding_ids.json).
-Chỉ cần chạy một lần (hoặc khi corpus thay đổi); local và cloud dùng chung file này.
+Đầu vào: data/processed/versions.jsonl (bước 2) — mã hóa MỌI PHIÊN BẢN, vì nội dung khác nhau theo thời gian.
+Mặc định gọi baai/bge-m3 qua OpenRouter (configs/base.yaml) → data/processed/embedding.npy
+(+ embedding_ids.json: danh sách vid cùng thứ tự). Chạy lại khi versions.jsonl thay đổi; local và cloud dùng chung.
 
 Văn bản đem mã hóa = ngu_canh + noi_dung (để điểm a), b) mang theo câu dẫn của khoản: mức phạt...).
 """
@@ -33,13 +34,13 @@ def main() -> None:
     import numpy as np
 
     proc = ROOT / cfg["paths"]["processed"]
-    units = [json.loads(line) for line in open(proc / "corpus.jsonl", encoding="utf-8")]
+    units = [json.loads(line) for line in open(proc / "versions.jsonl", encoding="utf-8")]
     units = [u for u in units if u["cap"] in ("Dieu", "Khoan", "Diem")]
     print(f"Mã hóa {len(units)} đơn vị bằng {cfg['embedding']['provider']}:{cfg['embedding']['model']} ...")
     vecs = get_embedder(cfg).encode_documents([index_text(u) for u in units])
 
     np.save(proc / "embedding.npy", np.asarray(vecs, dtype=np.float32))
-    json.dump([u["id"] for u in units], open(proc / "embedding_ids.json", "w", encoding="utf-8"))
+    json.dump([u["vid"] for u in units], open(proc / "embedding_ids.json", "w", encoding="utf-8"))
     print(f"{len(units)} vector {cfg['embedding']['dim']} chiều -> {proc / 'embedding.npy'}")
 
 

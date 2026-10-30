@@ -6,7 +6,9 @@ Tài liệu API tự sinh:  http://localhost:8000/docs
 """
 from __future__ import annotations
 
+import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -16,13 +18,28 @@ from fastapi.responses import JSONResponse
 from graphrag.common.config import load_config
 from graphrag.resources import Resources
 
-from .routers import admin, ask, documents, feedback, graph
+from .routers import admin, ask, documents, feedback, graph, system
+
+log = logging.getLogger("graphrag")
+
+
+def _warm_up(res: Resources) -> None:
+    """Mở kết nối DB và dựng chỉ mục BM25 ngay khi khởi động để câu hỏi đầu tiên không bị chậm.
+    Chạy nền: lỗi ở đây (vd. Docker chưa bật) chỉ ghi log, không chặn server."""
+    try:
+        _ = res.bm25
+        res.neo4j.verify_connectivity()
+        log.warning("Sẵn sàng: đã dựng chỉ mục BM25 và kết nối Neo4j")
+    except Exception as e:  # noqa: BLE001
+        log.warning("Chưa khởi động sẵn được (%s: %s). Kiểm tra Docker/.env", type(e).__name__, e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()                 # APP_ENV=cloud trên Render
     app.state.res = Resources(cfg)      # chưa kết nối DB ở đây (lazy)
+    if os.getenv("WARMUP", "1") == "1":
+        threading.Thread(target=_warm_up, args=(app.state.res,), daemon=True).start()
     yield
     app.state.res.close()
 
@@ -51,5 +68,5 @@ def health_db(request: Request):
     return request.app.state.res.check()
 
 
-for r in (ask.router, documents.router, graph.router, feedback.router, admin.router):
+for r in (ask.router, documents.router, graph.router, feedback.router, admin.router, system.router):
     app.include_router(r, prefix="/api")

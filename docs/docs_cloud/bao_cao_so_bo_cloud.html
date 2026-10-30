@@ -1,0 +1,621 @@
+<title>Báo cáo sơ bộ triển khai GraphRAG</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: báo cáo một cột ~780px, mục lục dính bên trái trên màn rộng; số mục là biển chỉ dẫn xanh của biển báo đường bộ */
+:root{
+  --bg:#f5f7fa; --surface:#ffffff; --ink:#142033; --muted:#58647a; --line:#d8dfe9;
+  --sign:#1b5cab; --sign-ink:#ffffff; --sign-soft:#e5edf8; --amber:#e9a800; --amber-soft:#fdf3d6;
+  --ok:#1d7a4c; --ok-soft:#e1f2e9; --stop:#c3272d;
+  --f-display:"Noto Serif",Georgia,"Times New Roman",serif;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e131b; --surface:#151c27; --ink:#e5eaf2; --muted:#9ba7b9; --line:#2a3545;
+  --sign:#5f9be6; --sign-ink:#0b1320; --sign-soft:#18283d; --amber:#f0c23e; --amber-soft:#2e2712;
+  --ok:#4bc387; --ok-soft:#12291e; --stop:#ef6a6a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e131b; --surface:#151c27; --ink:#e5eaf2; --muted:#9ba7b9; --line:#2a3545;
+  --sign:#5f9be6; --sign-ink:#0b1320; --sign-soft:#18283d; --amber:#f0c23e; --amber-soft:#2e2712;
+  --ok:#4bc387; --ok-soft:#12291e; --stop:#ef6a6a; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.65;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 64px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:210px minmax(0,1fr);gap:48px}
+main{min-width:0;max-width:800px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;padding-top:40px;font-size:13.5px}
+nav.toc b{display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+nav.toc a{display:flex;gap:10px;padding:5px 0;color:var(--muted);text-decoration:none;line-height:1.35}
+nav.toc a span{font-variant-numeric:tabular-nums;color:var(--sign);font-weight:600;min-width:14px}
+nav.toc a:hover{color:var(--ink)}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}nav.toc{display:none}}
+
+header.cover{padding:48px 0 28px;border-bottom:1px solid var(--line);display:grid;gap:14px}
+.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+h1{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);line-height:1.25;margin:0;text-wrap:balance}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 24px;font-size:13.5px;margin-top:6px}
+.meta div{display:grid;gap:1px}
+.meta dt{color:var(--muted);font-size:12px}
+.meta dd{margin:0;font-weight:500}
+.fill{color:var(--stop);font-weight:500}
+.note{background:var(--amber-soft);border-left:3px solid var(--amber);padding:10px 14px;font-size:14px;border-radius:2px}
+
+section{padding-top:44px}
+h2{font-family:var(--f-display);font-size:24px;line-height:1.3;margin:0 0 16px;display:flex;gap:14px;align-items:center;text-wrap:balance}
+h2 .no{flex:none;width:34px;height:34px;border-radius:6px;background:var(--sign);color:var(--sign-ink);font-family:var(--f-body);
+  font-size:17px;font-weight:700;display:grid;place-items:center;box-shadow:inset 0 0 0 2px var(--sign),inset 0 0 0 3.5px var(--sign-ink)}
+h3{font-size:16.5px;margin:26px 0 8px;font-weight:600}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 12px;padding-left:22px}
+li{margin:3px 0}
+code,.mono{font-family:var(--f-mono);font-size:.86em}
+code{background:var(--sign-soft);padding:1px 5px;border-radius:3px;overflow-wrap:anywhere}
+a{color:var(--sign)}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+
+.tbl{overflow-x:auto;margin:6px 0 16px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-size:12.5px;font-weight:600;color:var(--muted);background:var(--bg)}
+tr:last-child td{border-bottom:0}
+.cap{font-size:13px;color:var(--muted);margin:14px 0 4px;font-weight:500}
+
+.io{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:8px 0 16px}
+.io > div{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;min-width:0}
+.io h4{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--sign)}
+.io ul{padding-left:18px;margin:0;font-size:14px}
+@media (max-width:640px){.io{grid-template-columns:minmax(0,1fr)}}
+
+.example{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 16px;background:var(--surface)}
+.example > div{padding:12px 16px;min-width:0}
+.example > div + div{border-left:1px solid var(--line)}
+.example .q{font-weight:500}
+.example .date{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.example .a{font-size:14px;margin-top:4px}
+.example .cite{font-family:var(--f-mono);font-size:11.5px;color:var(--sign);margin-top:4px;overflow-wrap:anywhere}
+@media (max-width:640px){.example{grid-template-columns:minmax(0,1fr)}.example > div + div{border-left:0;border-top:1px solid var(--line)}}
+
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.now{background:var(--amber-soft);color:var(--ink);box-shadow:inset 0 0 0 1px var(--amber)}
+.chip.todo{background:var(--bg);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.chip.pick{background:var(--sign);color:var(--sign-ink)}
+
+.team{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:8px 0 14px}
+.team > div{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;min-width:0}
+.team .role{font-size:12px;color:var(--muted)}
+.team h4{margin:2px 0 8px;font-size:15px}
+.team ul{padding-left:18px;font-size:13.5px;margin:0}
+@media (max-width:760px){.team{grid-template-columns:minmax(0,1fr)}}
+
+.diagram{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px;margin:8px 0 6px}
+.diagram svg{display:block;min-width:680px;width:100%;height:auto}
+.d-box{fill:var(--surface);stroke:var(--line);stroke-width:1.3}
+.d-hl{fill:var(--sign-soft);stroke:var(--sign);stroke-width:1.3}
+.d-group{fill:none;stroke:var(--sign);stroke-width:1.2;stroke-dasharray:5 4}
+.d-t{fill:var(--ink);font:600 13px var(--f-body)}
+.d-s{fill:var(--muted);font:400 11.5px var(--f-body)}
+.d-l{fill:var(--sign);font:500 11px var(--f-body)}
+.d-line{stroke:var(--muted);stroke-width:1.3;fill:none}
+.d-dash{stroke:var(--amber);stroke-width:1.5;fill:none;stroke-dasharray:4 3}
+.d-arrow{fill:var(--muted)}
+.d-arrow2{fill:var(--amber)}
+.figcap{font-size:13px;color:var(--muted);text-align:center;margin:4px 0 16px}
+
+.step{display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 14px;padding:18px 0;border-top:1px solid var(--line)}
+.step:first-of-type{border-top:0}
+.step .k{font-family:var(--f-mono);font-weight:500;font-size:13px;color:var(--sign);padding-top:3px}
+.step h3{margin:0 0 4px}
+.step .who{font-size:12.5px;color:var(--muted);font-weight:500;margin-left:6px}
+.step ol{font-size:14.5px}
+.cfg{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;font-size:13.5px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 14px;margin:6px 0 10px}
+.cfg dt{color:var(--muted)}
+.cfg dd{margin:0;font-family:var(--f-mono);font-size:12.5px;overflow-wrap:anywhere}
+@media (max-width:520px){.cfg{grid-template-columns:minmax(0,1fr)}.cfg dd{margin-bottom:6px}}
+
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin:8px 0 6px}
+figure.shot{margin:0;min-width:0}
+figure.shot img{display:none;width:100%;border:1px solid var(--line);border-radius:6px}
+figure.shot.ok img{display:block}
+figure.shot .ph{aspect-ratio:16/9;max-width:100%;border:1.5px dashed var(--line);border-radius:6px;display:grid;place-content:center;gap:4px;text-align:center;padding:10px;background:var(--surface);color:var(--muted);font-size:12.5px}
+figure.shot .ph code{background:none;padding:0;font-size:11px}
+figure.shot.ok .ph{display:none}
+figure.shot figcaption{font-size:12.5px;color:var(--muted);margin-top:6px;text-align:center}
+
+/* phác thảo giao diện */
+.mock-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:10px 0 6px}
+@media (max-width:760px){.mock-grid{grid-template-columns:minmax(0,1fr)}}
+.mock{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);font-size:12.5px;line-height:1.5;min-width:0}
+.mock .bar{display:flex;gap:6px;align-items:center;padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--line)}
+.mock .bar i{width:8px;height:8px;border-radius:50%;background:var(--line);display:block}
+.mock .bar span{margin-left:8px;font-family:var(--f-mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mock .tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.mock .tabs b{font-weight:500;padding:4px 8px;color:var(--muted);border-bottom:2px solid transparent}
+.mock .tabs b.on{color:var(--sign);border-color:var(--sign)}
+.mock .body{padding:10px 12px;display:grid;gap:8px}
+.mock .input{border:1px solid var(--line);border-radius:4px;padding:5px 8px;color:var(--ink);background:var(--bg)}
+.mock .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mock .btn{background:var(--sign);color:var(--sign-ink);border-radius:4px;padding:4px 10px;font-weight:600}
+.mock .ghost{border:1px solid var(--line);border-radius:4px;padding:3px 8px;color:var(--muted)}
+.mock .ans{border-left:3px solid var(--sign);padding:4px 10px;background:var(--sign-soft)}
+.mock .cit{font-family:var(--f-mono);font-size:10.5px;color:var(--sign)}
+.mock .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mock .stats div{border:1px solid var(--line);border-radius:4px;padding:6px;text-align:center}
+.mock .stats b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
+.mock svg{width:100%;height:auto;display:block}
+.mock-cap{font-size:12.5px;color:var(--muted);padding:6px 12px 10px}
+
+.refs{font-size:13.5px;padding-left:28px}
+.refs li{margin:5px 0;overflow-wrap:anywhere}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+a:focus-visible{outline:2px solid var(--sign);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Mục lục">
+  <b>Nội dung</b>
+  <a href="#bai-toan"><span>1</span>Mô tả bài toán</a>
+  <a href="#dich-vu"><span>2</span>Dịch vụ được lựa chọn</a>
+  <a href="#phan-cong"><span>3</span>Phân công công việc</a>
+  <a href="#ke-hoach"><span>4</span>Kế hoạch thực hiện</a>
+  <a href="#trien-khai"><span>5</span>Các bước triển khai</a>
+  <a href="#ket-qua"><span>6</span>Kết quả sau triển khai</a>
+  <a href="#ket-luan"><span>7</span>Kết luận, hướng phát triển</a>
+  <a href="#tham-khao"><span>·</span>Tài liệu tham khảo</a>
+</nav>
+
+<main>
+<header class="cover">
+  <div class="eyebrow">Học phần Điện toán đám mây · Mini project · Báo cáo sơ bộ</div>
+  <h1>Triển khai hệ thống hỏi đáp pháp luật giao thông đường bộ Việt Nam (GraphRAG) lên public cloud</h1>
+  <dl class="meta">
+    <div><dt>Nhóm</dt><dd class="fill">[số nhóm]</dd></div>
+    <div><dt>Thành viên</dt><dd class="fill">[TV1] · [TV2] · [TV3]</dd></div>
+    <div><dt>Giảng viên</dt><dd class="fill">[họ tên giảng viên]</dd></div>
+    <div><dt>Ngày trình bày</dt><dd>21/10/2026</dd></div>
+  </dl>
+  <p class="note">Bản trình bày trước khi triển khai. Mục 1–4 đã chốt. Mục 5 là quy trình sẽ làm, mục 6 là giao diện và chức năng dự kiến; các khung ảnh nét đứt sẽ được thay bằng ảnh chụp màn hình thật trong quá trình triển khai (26/10 – 22/11).</p>
+</header>
+
+<!-- 1 -->
+<section id="bai-toan">
+<h2><span class="no">1</span>Mô tả bài toán</h2>
+<p>Người dân và tài xế thường cần biết nhanh một hành vi bị phạt bao nhiêu, bị trừ mấy điểm giấy phép lái xe, nhưng quy định nằm rải rác trong luật, nghị định, thông tư và liên tục được sửa đổi. Nhóm đã xây dựng hệ thống hỏi đáp dựa trên GraphRAG ở môn Xử lý ngôn ngữ tự nhiên: kho 11 văn bản (Luật 36/2024, Luật 118/2025, Nghị định 168/2024, 238/2026, 151/2024, 184/2025, 236/2026, các Thông tư 38/2024, 65/2024, 13/2025, 105/2026) được tách thành 2.997 Chương/Điều/Khoản/Điểm, lưu kèm ngày hiệu lực và quan hệ sửa đổi; thêm một văn bản hợp nhất dùng để đối chiếu.</p>
+<p>Mini project này đưa hệ thống đó thành <b>một ứng dụng web công khai trên cloud</b>: ai cũng mở được bằng trình duyệt hoặc điện thoại, chạy 24/7, tự cập nhật khi nhóm đẩy code mới, và giữ chi phí hạ tầng bằng 0.</p>
+
+<div class="io">
+  <div><h4>Đầu vào</h4><ul>
+    <li>Câu hỏi tiếng Việt về giao thông đường bộ (mức phạt, điều kiện, thủ tục)</li>
+    <li>Ngày áp dụng (mặc định hôm nay)</li>
+    <li>Phía quản trị: kho văn bản đã xử lý và mật khẩu quản trị</li></ul></div>
+  <div><h4>Đầu ra</h4><ul>
+    <li>Câu trả lời có trích dẫn Điều/Khoản/Điểm còn hiệu lực tại ngày hỏi</li>
+    <li>Nguyên văn điều khoản, đồ thị dẫn chiếu và sửa đổi</li>
+    <li>Một địa chỉ web công khai, dùng được trên mọi thiết bị</li></ul></div>
+  <div><h4>Nội hàm</h4><ul>
+    <li>Đưa pipeline GraphRAG thành dịch vụ web phục vụ nhiều người cùng lúc</li>
+    <li>Chạy trong máy chủ miễn phí 512 MB RAM</li>
+    <li>Bảo mật khóa API, mật khẩu; tự động triển khai; kiểm soát chi phí</li></ul></div>
+</div>
+
+<p class="cap">Ví dụ: cùng một câu hỏi, đáp án phụ thuộc ngày áp dụng (điểm m khoản 3 Điều 6 Nghị định 168 có hiệu lực từ 01/01/2026)</p>
+<div class="example">
+  <div><div class="date">Ngày áp dụng: 01/10/2025</div>
+    <div class="q">Lái ô tô chở trẻ em dưới 10 tuổi, cao dưới 1,35 m ngồi cùng hàng ghế với người lái thì bị phạt thế nào?</div>
+    <div class="a">Chưa bị xử phạt: quy định này chưa có hiệu lực.</div>
+    <div class="cite">ND168_2024.D6.K3.m · ND168_2024.D53.K2</div></div>
+  <div><div class="date">Ngày áp dụng: 01/09/2026</div>
+    <div class="q">Cùng câu hỏi.</div>
+    <div class="a">Phạt tiền từ 800.000 đến 1.000.000 đồng.</div>
+    <div class="cite">ND168_2024.D6.K3.m · ND238_2026.D2.K2</div></div>
+</div>
+
+<h3>1.1. Tác nhân và chức năng</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Tác nhân</th><th>Chức năng</th><th>API backend</th></tr></thead>
+  <tbody>
+  <tr><td rowspan="4">Người dùng<br><span class="muted small">không cần đăng nhập</span></td><td><b>F1. Hỏi đáp</b>: nhập câu hỏi, chọn ngày, nhận câu trả lời có trích dẫn</td><td><code>POST /api/ask</code></td></tr>
+  <tr><td><b>F2. Tra cứu văn bản</b>: xem Điều/Khoản theo ngày, thấy bản trước và sau sửa đổi</td><td><code>GET /api/documents</code><br><code>GET /api/units/{id}</code></td></tr>
+  <tr><td><b>F3. Đồ thị liên kết</b> của một điều khoản (thuộc, dẫn chiếu, sửa đổi)</td><td><code>GET /api/graph/{id}</code></td></tr>
+  <tr><td><b>F4. Đánh giá</b> câu trả lời: hữu ích / chưa đúng</td><td><code>POST /api/feedback</code></td></tr>
+  <tr><td>Quản trị viên<br><span class="muted small">mật khẩu</span></td><td><b>F5. Thống kê</b>: lượt hỏi theo ngày, thời gian phản hồi, câu bị đánh giá chưa đúng</td><td><code>GET /api/admin/stats</code></td></tr>
+  <tr><td>Hệ thống</td><td>Kiểm tra tình trạng dịch vụ và kết nối cơ sở dữ liệu</td><td><code>GET /health</code>, <code>/health/db</code></td></tr>
+  </tbody></table></div>
+
+<h3>1.2. Luồng xử lý một câu hỏi (F1)</h3>
+<ol class="small">
+  <li>Trình duyệt gửi câu hỏi và ngày áp dụng tới backend.</li>
+  <li>Backend tìm ứng viên bằng BM25 và tìm vector (câu hỏi được mã hóa bằng bge-m3 qua OpenRouter, so khớp trong PostgreSQL pgvector), gộp bằng RRF, rồi rerank.</li>
+  <li>Neo4j mở rộng sang điều khoản dẫn chiếu và văn bản sửa đổi; PostgreSQL chỉ giữ phiên bản có hiệu lực tại ngày hỏi.</li>
+  <li>Mô hình ngôn ngữ (gpt-4o-mini qua OpenRouter) sinh câu trả lời có trích dẫn; backend ghi nhật ký rồi trả kết quả.</li>
+</ol>
+</section>
+
+<!-- 2 -->
+<section id="dich-vu">
+<h2><span class="no">2</span>Dịch vụ được lựa chọn</h2>
+<p>Tiêu chí theo yêu cầu của giảng viên: nhà cung cấp vừa và nhỏ, có gói dùng thử, phù hợp bài toán, hạn chế phải nhập thẻ thanh toán. Điều khoản gói miễn phí dưới đây được kiểm tra ngày 19/10/2026.</p>
+
+<p class="cap">Bảng 2.1. So sánh nền tảng chạy ứng dụng</p>
+<div class="tbl"><table>
+  <thead><tr><th>Nhà cung cấp</th><th>Gói miễn phí</th><th>Thẻ</th><th>Đánh giá</th></tr></thead>
+  <tbody>
+  <tr><td><b>Render</b> <span class="chip pick">chọn</span></td><td>Web Service 512 MB RAM, 750 giờ/tháng, tắt sau 15 phút không truy cập; Static Site miễn phí</td><td>Không</td><td>Chạy được cả backend (Docker) và frontend, tự deploy từ GitHub</td></tr>
+  <tr><td>Koyeb</td><td>1 dịch vụ 512 MB RAM, 0,1 vCPU</td><td>Bắt buộc</td><td>Giữ tạm 29 USD khi xác minh thẻ; rủi ro phát sinh phí</td></tr>
+  <tr><td>DigitalOcean</td><td>Máy ảo (IaaS), tín dụng dùng thử khoảng 5 USD</td><td>Bắt buộc</td><td>Phải tự cài đặt máy chủ; tín dụng ít</td></tr>
+  <tr><td>Hugging Face Spaces</td><td>Phần cứng CPU miễn phí, nhưng Docker Space cần gói trả phí</td><td>Gói PRO</td><td>Không chạy miễn phí được backend FastAPI</td></tr>
+  </tbody></table></div>
+
+<h3>2.1. Dịch vụ chính: Render</h3>
+<p>Render là nền tảng PaaS (Platform as a Service): nhóm chỉ đưa mã nguồn lên GitHub, Render tự build, chạy, cấp địa chỉ HTTPS dạng <code>*.onrender.com</code> và deploy lại mỗi lần push. Nhóm không phải quản lý máy chủ, hệ điều hành hay chứng chỉ SSL.</p>
+<p class="cap">Bảng 2.2. Giao diện và tính năng sau khi đăng nhập dashboard.render.com</p>
+<div class="tbl"><table>
+  <thead><tr><th>Khu vực</th><th>Tính năng</th><th>Nhóm dùng để</th></tr></thead>
+  <tbody>
+  <tr><td>Dashboard / Projects</td><td>Danh sách dịch vụ, trạng thái (Deployed, Failed, Suspended), loại và khu vực</td><td>Theo dõi 2 dịch vụ của nhóm</td></tr>
+  <tr><td>Nút <b>+ New</b></td><td>Tạo Static Site, Web Service, Private Service, Background Worker, Cron Job, Postgres, Key Value, Blueprint</td><td>Web Service (backend), Static Site (frontend)</td></tr>
+  <tr><td>Trang dịch vụ: <b>Events</b></td><td>Lịch sử các lần deploy, commit tương ứng, nút Manual Deploy, Rollback</td><td>Minh họa tự deploy khi push</td></tr>
+  <tr><td><b>Logs</b></td><td>Log build và log chạy theo thời gian thực, tìm kiếm</td><td>Gỡ lỗi build Docker, lỗi kết nối</td></tr>
+  <tr><td><b>Metrics</b></td><td>CPU, bộ nhớ, số request, băng thông</td><td>Kiểm tra mức RAM so với giới hạn 512 MB</td></tr>
+  <tr><td><b>Environment</b></td><td>Biến môi trường và secret file, tách khỏi mã nguồn</td><td>Khóa API, chuỗi kết nối DB, mật khẩu quản trị</td></tr>
+  <tr><td><b>Settings</b></td><td>Repo, nhánh, Dockerfile, Health Check Path, Auto-Deploy, tên miền riêng</td><td>Cấu hình build và kiểm tra sống</td></tr>
+  <tr><td>Workspace: <b>Billing</b></td><td>Gói đang dùng, số giờ miễn phí đã dùng, hóa đơn</td><td>Chứng minh chi phí 0 USD</td></tr>
+  </tbody></table></div>
+<div class="shots">
+  <figure class="shot"><img src="anh/A2_01_render_dashboard.png" alt="Dashboard Render sau khi đăng nhập"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/A2_01_render_dashboard.png</code></div><figcaption>Hình 2.1. Dashboard Render</figcaption></figure>
+  <figure class="shot"><img src="anh/A2_02_render_new.png" alt="Menu New của Render"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/A2_02_render_new.png</code></div><figcaption>Hình 2.2. Các loại dịch vụ trong menu New</figcaption></figure>
+</div>
+
+<h3>2.2. Dịch vụ đi kèm</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Dịch vụ</th><th>Gói sử dụng</th><th>Giao diện chính sau khi đăng nhập</th><th>Vai trò</th></tr></thead>
+  <tbody>
+  <tr><td><b>Supabase</b></td><td>Free: 500 MB/dự án, 2 dự án, tạm dừng sau 7 ngày ít hoạt động; không cần thẻ</td><td>Table Editor, SQL Editor, Database → Extensions, nút Connect (chuỗi kết nối), Reports/Usage</td><td>PostgreSQL + pgvector: nội dung điều khoản, vector, ngày hiệu lực, nhật ký hỏi đáp</td></tr>
+  <tr><td><b>Neo4j AuraDB</b></td><td>Free: 50.000 node, 175.000 cạnh, tạm dừng sau 3 ngày không dùng; không cần thẻ</td><td>Danh sách Instances (Running/Paused), Query (chạy Cypher), Explore (xem đồ thị)</td><td>Đồ thị: thuộc, dẫn chiếu, hướng dẫn, sửa đổi</td></tr>
+  <tr><td><b>OpenRouter</b></td><td>Trả theo lượt từ credit nạp trước; gpt-4o-mini 0,15/0,60 USD mỗi triệu token vào/ra, bge-m3 0,01 USD</td><td>Keys (tạo key, đặt hạn mức chi tiêu), Activity (lượt gọi, chi phí), Credits</td><td>Một API cho embedding, rerank và sinh câu trả lời</td></tr>
+  <tr><td><b>GitHub</b></td><td>Miễn phí</td><td>Repository, Actions</td><td>Lưu mã nguồn, kiểm thử tự động mỗi lần push</td></tr>
+  </tbody></table></div>
+<div class="shots">
+  <figure class="shot"><img src="anh/A2_03_supabase_dashboard.png" alt="Dashboard Supabase"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/A2_03_supabase_dashboard.png</code></div><figcaption>Hình 2.3. Supabase</figcaption></figure>
+  <figure class="shot"><img src="anh/A2_04_aura_console.png" alt="Console Neo4j Aura"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/A2_04_aura_console.png</code></div><figcaption>Hình 2.4. Neo4j Aura console</figcaption></figure>
+  <figure class="shot"><img src="anh/A2_05_openrouter_keys.png" alt="Trang Keys của OpenRouter"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/A2_05_openrouter_keys.png</code></div><figcaption>Hình 2.5. OpenRouter Keys</figcaption></figure>
+</div>
+
+<h3>2.3. Tính hợp lý với bài toán</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Yêu cầu của bài toán</th><th>Đáp ứng</th></tr></thead>
+  <tbody>
+  <tr><td>Backend Python có pipeline GraphRAG, frontend tĩnh</td><td>Render Web Service chạy Docker; Static Site phục vụ React</td></tr>
+  <tr><td>Dữ liệu vừa cần tìm vector vừa cần đồ thị</td><td>Supabase có sẵn pgvector; AuraDB chính là Neo4j dùng ở môn NLP, cùng lược đồ và mã định danh</td></tr>
+  <tr><td>Máy chủ miễn phí chỉ 512 MB RAM</td><td>Mọi mô hình gọi qua OpenRouter, không chạy trên máy chủ; embedding kho văn bản tính một lần trên máy nhóm</td></tr>
+  <tr><td>Kiểm soát chi phí, tránh nhập thẻ</td><td>Render, Supabase, AuraDB, GitHub không cần thẻ; key OpenRouter có hạn mức chi tiêu, không tự nạp tiền</td></tr>
+  <tr><td>Nhóm mới làm cloud</td><td>Cả 4 dịch vụ cấu hình bằng giao diện web, có tài liệu và video hướng dẫn chính thức</td></tr>
+  </tbody></table></div>
+</section>
+
+<!-- 3 -->
+<section id="phan-cong">
+<h2><span class="no">3</span>Phân công công việc</h2>
+<p>Chia theo tầng của hệ thống, mỗi người phụ trách một nhóm dịch vụ cloud và phần báo cáo tương ứng.</p>
+<div class="team">
+  <div><div class="role">TV1 · Nhóm trưởng</div><h4>Backend + Render Web Service</h4><ul>
+    <li>API FastAPI: <code>/api/ask</code>, <code>/health</code>, <code>/api/admin/stats</code></li>
+    <li>Dockerfile, Web Service, biến môi trường, CORS</li>
+    <li>Repo GitHub, CI; key OpenRouter cho bản cloud</li>
+    <li>Sơ đồ tuần tự, sơ đồ triển khai</li>
+    <li>Báo cáo: mục 2, mục 5 phần backend; ghép báo cáo</li></ul></div>
+  <div><div class="role">TV2</div><h4>Dữ liệu + Supabase + AuraDB</h4><ul>
+    <li>Tạo Supabase (bật pgvector, chạy schema), tạo AuraDB</li>
+    <li>Script nạp dữ liệu và embedding lên cloud</li>
+    <li>API <code>/api/documents</code>, <code>/api/units</code>, <code>/api/graph</code>, <code>/api/feedback</code></li>
+    <li>Sơ đồ ERD, lược đồ đồ thị</li>
+    <li>Báo cáo: mục 1, mục 5 phần dữ liệu</li></ul></div>
+  <div><div class="role">TV3</div><h4>Frontend + Static Site + giám sát</h4><ul>
+    <li>Giao diện React 4 trang</li>
+    <li>Triển khai Render Static Site</li>
+    <li>Theo dõi mức sử dụng và chi phí hằng tuần</li>
+    <li>Sơ đồ use case, phác thảo giao diện</li>
+    <li>Báo cáo: mục 6, mục 5 phần frontend</li></ul></div>
+</div>
+<p class="small"><b>Cả nhóm:</b> mục 3, 4, 7 của báo cáo, slide, tập demo và quay video dự phòng.</p>
+</section>
+
+<!-- 4 -->
+<section id="ke-hoach">
+<h2><span class="no">4</span>Kế hoạch thực hiện</h2>
+<p>Chạy song song với môn Xử lý ngôn ngữ tự nhiên (mã nguồn GraphRAG chốt ngày 22/11). Các mốc sẽ điều chỉnh theo hạn nộp chính thức của học phần.</p>
+<div class="tbl"><table>
+  <thead><tr><th>Thời gian</th><th>Bước</th><th>Nội dung</th><th>Kết quả dự kiến</th><th>Trạng thái</th></tr></thead>
+  <tbody>
+  <tr><td class="mono small">19/10 – 25/10</td><td>1. Tìm hiểu, phân tích thiết kế</td><td>Xem hết hướng dẫn của Render, Supabase, AuraDB; tạo tài khoản; vẽ use case, ERD, sơ đồ tuần tự, sơ đồ triển khai</td><td>Đủ tài khoản (không nhập thẻ), key có hạn mức, bản phân tích thiết kế</td><td><span class="chip now">đang làm</span></td></tr>
+  <tr><td class="mono small">26/10 – 01/11</td><td>2. "Hello cloud"</td><td>Deploy backend chỉ có <code>/health</code> và frontend trang trống; backend kết nối thử Supabase, AuraDB</td><td>Hai địa chỉ <code>*.onrender.com</code> chạy được</td><td><span class="chip todo">chưa</span></td></tr>
+  <tr><td class="mono small">02/11 – 08/11</td><td>3. Dữ liệu lên cloud</td><td>Tạo bảng, nạp 11 văn bản và embedding lên Supabase; nạp node, cạnh lên AuraDB</td><td>F2, F3 chạy trên cloud</td><td><span class="chip todo">chưa</span></td></tr>
+  <tr><td class="mono small">09/11 – 15/11</td><td>4. Hỏi đáp và giao diện</td><td>Đưa pipeline GraphRAG vào <code>/api/ask</code>; trang Hỏi đáp, Tra cứu, Đồ thị; lưu nhật ký và đánh giá</td><td>F1, F4 chạy trên cloud</td><td><span class="chip todo">chưa</span></td></tr>
+  <tr><td class="mono small">16/11 – 22/11</td><td>5. Hoàn thiện, kiểm thử</td><td>Trang quản trị; thử trên điện thoại và máy khác; kiểm tra bảo mật key; đo thời gian phản hồi</td><td>Sản phẩm ổn định, đủ ảnh minh họa</td><td><span class="chip todo">chưa</span></td></tr>
+  <tr><td class="mono small">23/11 – 29/11</td><td>6. Báo cáo, slide, demo</td><td>Viết báo cáo ~20 trang, làm slide, tập demo, quay video dự phòng</td><td>Hồ sơ nộp đầy đủ</td><td><span class="chip todo">chưa</span></td></tr>
+  </tbody></table></div>
+<p class="small"><b>Đã chuẩn bị (tính đến 21/10):</b> repo GitHub chung; khung backend FastAPI với đủ các API ở mục 1.1 và Dockerfile; frontend React 4 trang; cấu hình tách môi trường máy nhóm / cloud; file Blueprint <code>render.yaml</code>; dữ liệu đã tách cấu trúc (2.997 đơn vị).</p>
+</section>
+
+<!-- 5 -->
+<section id="trien-khai">
+<h2><span class="no">5</span>Các bước triển khai lên cloud</h2>
+<p>Phần nặng (đọc văn bản, tách Điều/Khoản, tính embedding cho kho) chạy một lần trên máy nhóm. Máy chủ cloud chỉ nhận câu hỏi, truy xuất trong hai cơ sở dữ liệu và gọi OpenRouter.</p>
+
+<div class="diagram" role="img" aria-label="Sơ đồ triển khai: người dùng truy cập Static Site và Web Service trên Render; Web Service kết nối Supabase, AuraDB và OpenRouter; GitHub tự deploy lên Render; máy nhóm nạp dữ liệu vào Supabase và AuraDB">
+<svg viewBox="0 0 780 350" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrow"/></marker>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrow2"/></marker>
+  </defs>
+  <!-- người dùng -->
+  <rect x="8" y="128" width="134" height="64" rx="6" class="d-box"/>
+  <text x="75" y="155" text-anchor="middle" class="d-t">Người dùng</text>
+  <text x="75" y="174" text-anchor="middle" class="d-s">máy tính, điện thoại</text>
+  <!-- render -->
+  <rect x="190" y="26" width="250" height="236" rx="8" class="d-group"/>
+  <text x="204" y="46" class="d-l">RENDER · khu vực Singapore</text>
+  <rect x="208" y="60" width="214" height="66" rx="6" class="d-hl"/>
+  <text x="315" y="86" text-anchor="middle" class="d-t">Static Site</text>
+  <text x="315" y="106" text-anchor="middle" class="d-s">React + Vite · 4 trang</text>
+  <rect x="208" y="156" width="214" height="86" rx="6" class="d-hl"/>
+  <text x="315" y="182" text-anchor="middle" class="d-t">Web Service (Docker)</text>
+  <text x="315" y="201" text-anchor="middle" class="d-s">FastAPI + pipeline GraphRAG</text>
+  <text x="315" y="219" text-anchor="middle" class="d-s">Free · 512 MB RAM</text>
+  <!-- dịch vụ dữ liệu -->
+  <rect x="496" y="26" width="236" height="60" rx="6" class="d-box"/>
+  <text x="614" y="51" text-anchor="middle" class="d-t">Supabase</text>
+  <text x="614" y="70" text-anchor="middle" class="d-s">PostgreSQL + pgvector</text>
+  <rect x="496" y="110" width="236" height="60" rx="6" class="d-box"/>
+  <text x="614" y="135" text-anchor="middle" class="d-t">Neo4j AuraDB Free</text>
+  <text x="614" y="154" text-anchor="middle" class="d-s">đồ thị dẫn chiếu, sửa đổi</text>
+  <rect x="496" y="194" width="236" height="60" rx="6" class="d-box"/>
+  <text x="614" y="219" text-anchor="middle" class="d-t">OpenRouter API</text>
+  <text x="614" y="238" text-anchor="middle" class="d-s">bge-m3 · rerank · gpt-4o-mini</text>
+  <!-- github, máy nhóm -->
+  <rect x="226" y="288" width="178" height="50" rx="6" class="d-box"/>
+  <text x="315" y="310" text-anchor="middle" class="d-t">GitHub</text>
+  <text x="315" y="327" text-anchor="middle" class="d-s">mã nguồn · Actions</text>
+  <rect x="496" y="288" width="236" height="50" rx="6" class="d-box"/>
+  <text x="614" y="310" text-anchor="middle" class="d-t">Máy của nhóm</text>
+  <text x="614" y="327" text-anchor="middle" class="d-s">tách văn bản, embedding (1 lần)</text>
+  <!-- mũi tên -->
+  <path d="M142,146 L206,98" class="d-line" marker-end="url(#ar)"/>
+  <text x="146" y="112" class="d-l">HTTPS</text>
+  <path d="M142,174 L206,196" class="d-line" marker-end="url(#ar)"/>
+  <text x="146" y="205" class="d-l">/api/*</text>
+  <path d="M422,180 L494,62" class="d-line" marker-end="url(#ar)"/>
+  <path d="M422,196 L494,140" class="d-line" marker-end="url(#ar)"/>
+  <path d="M422,214 L494,222" class="d-line" marker-end="url(#ar)"/>
+  <path d="M315,286 L315,264" class="d-line" marker-end="url(#ar)"/>
+  <text x="322" y="279" class="d-l">push → tự deploy</text>
+  <path d="M732,313 L760,313 L760,56 L734,56" class="d-dash" marker-end="url(#ar2)"/>
+  <path d="M760,140 L734,140" class="d-dash" marker-end="url(#ar2)"/>
+  <text x="768" y="200" class="d-l" transform="rotate(90 768 200)" text-anchor="middle">nạp dữ liệu</text>
+</svg>
+</div>
+<p class="figcap">Hình 5.1. Sơ đồ triển khai</p>
+
+<div class="step"><div class="k">B1</div><div>
+  <h3>Chuẩn bị mã nguồn trên GitHub <span class="who">TV1</span></h3>
+  <ol><li>Đẩy thư mục dự án lên repo chung; <code>.gitignore</code> loại mọi file <code>.env</code> chứa khóa và mật khẩu.</li>
+  <li>Mời 2 thành viên làm collaborator; chỉ merge vào nhánh <code>main</code> qua Pull Request.</li>
+  <li>GitHub Actions chạy kiểm thử và build frontend mỗi lần push.</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B1_01_github_repo.png" alt="Repo GitHub"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B1_01_github_repo.png</code></div><figcaption>Hình 5.2. Repo và cấu trúc thư mục</figcaption></figure>
+  <figure class="shot"><img src="anh/B1_02_github_actions.png" alt="GitHub Actions"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B1_02_github_actions.png</code></div><figcaption>Hình 5.3. GitHub Actions chạy thành công</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B2</div><div>
+  <h3>Tạo cơ sở dữ liệu Supabase <span class="who">TV2</span></h3>
+  <ol><li>Đăng nhập bằng GitHub → <b>New project</b>, khu vực <b>Singapore</b>, đặt mật khẩu cơ sở dữ liệu.</li>
+  <li><b>Database → Extensions</b>: bật <code>vector</code>.</li>
+  <li><b>SQL Editor</b>: chạy <code>db/schema.sql</code> (bảng <code>van_ban</code>, <code>don_vi</code> với cột <code>vector(1024)</code>, <code>hoi_dap_log</code>).</li>
+  <li><b>Connect</b>: chép chuỗi kết nối loại <b>Session pooler</b> (hỗ trợ IPv4).</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B2_01_supabase_new_project.png" alt="Tạo project Supabase"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B2_01_supabase_new_project.png</code></div><figcaption>Hình 5.4. Tạo project</figcaption></figure>
+  <figure class="shot"><img src="anh/B2_02_supabase_extension_vector.png" alt="Bật extension vector"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B2_02_supabase_extension_vector.png</code></div><figcaption>Hình 5.5. Bật extension vector</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B3</div><div>
+  <h3>Tạo đồ thị trên Neo4j AuraDB Free <span class="who">TV2</span></h3>
+  <ol><li>console.neo4j.io → <b>New instance</b> → <b>AuraDB Free</b>.</li>
+  <li>Tải ngay file thông tin đăng nhập (mật khẩu chỉ hiện một lần).</li>
+  <li><b>Query</b>: chạy <code>db/neo4j_constraints.cypher</code> (ràng buộc mã định danh duy nhất).</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B3_01_aura_running.png" alt="Instance AuraDB đang chạy"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B3_01_aura_running.png</code></div><figcaption>Hình 5.6. Instance ở trạng thái Running</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B4</div><div>
+  <h3>Tạo API key OpenRouter cho bản cloud <span class="who">TV1</span></h3>
+  <ol><li><b>Keys → Create Key</b>: key riêng cho bản triển khai, không dùng chung key chạy thực nghiệm.</li>
+  <li>Đặt <b>credit limit</b> nhỏ, không bật tự động nạp tiền. Lộ key thì chỉ cần vô hiệu hóa key này.</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B4_01_openrouter_key_limit.png" alt="Key có hạn mức"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B4_01_openrouter_key_limit.png</code></div><figcaption>Hình 5.7. Key có hạn mức chi tiêu (đã che key)</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B5</div><div>
+  <h3>Nạp dữ liệu từ máy của nhóm <span class="who">TV2</span></h3>
+  <ol><li>Chép <code>.env.cloud.example</code> thành <code>.env.cloud</code>, điền chuỗi kết nối Supabase, thông tin AuraDB.</li>
+  <li>Chạy <code>python scripts/04_load.py --env cloud</code>: nạp 11 văn bản, 2.997 đơn vị và vector đã tính sẵn; tạo node, cạnh trên AuraDB.</li>
+  <li>Kiểm tra số bản ghi trong Table Editor và xem đồ thị một điều luật trong Aura.</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B5_01_terminal_load.png" alt="Kết quả nạp dữ liệu"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B5_01_terminal_load.png</code></div><figcaption>Hình 5.8. Kết quả nạp dữ liệu</figcaption></figure>
+  <figure class="shot"><img src="anh/B5_02_aura_graph.png" alt="Đồ thị trong Aura"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B5_02_aura_graph.png</code></div><figcaption>Hình 5.9. Đồ thị quanh Điều 6 NĐ 168</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B6</div><div>
+  <h3>Triển khai backend: Render Web Service <span class="who">TV1</span></h3>
+  <ol><li>Đăng nhập Render bằng GitHub → <b>+ New → Web Service</b> → chọn repo.</li>
+  <li>Điền cấu hình như bảng dưới, chọn gói <b>Free</b>.</li>
+  <li><b>Environment</b>: khai báo <code>APP_ENV=cloud</code>, <code>DATABASE_URL</code>, <code>NEO4J_URI</code>, <code>NEO4J_USER</code>, <code>NEO4J_PASSWORD</code>, <code>OPENROUTER_API_KEY</code>, <code>ADMIN_PASSWORD</code>, <code>CORS_ORIGINS</code>.</li>
+  <li>Theo dõi log build; mở <code>/health</code>, <code>/health/db</code> và trang tài liệu API <code>/docs</code>.</li></ol>
+  <dl class="cfg">
+    <dt>Language</dt><dd>Docker</dd>
+    <dt>Branch</dt><dd>main</dd>
+    <dt>Region</dt><dd>Singapore</dd>
+    <dt>Root Directory</dt><dd>(để trống)</dd>
+    <dt>Dockerfile Path</dt><dd>./backend/Dockerfile</dd>
+    <dt>Docker Build Context</dt><dd>.</dd>
+    <dt>Health Check Path</dt><dd>/health</dd>
+  </dl>
+  <div class="shots"><figure class="shot"><img src="anh/B6_01_render_web_config.png" alt="Cấu hình Web Service"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B6_01_render_web_config.png</code></div><figcaption>Hình 5.10. Cấu hình Web Service</figcaption></figure>
+  <figure class="shot"><img src="anh/B6_02_render_environment.png" alt="Biến môi trường"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B6_02_render_environment.png</code></div><figcaption>Hình 5.11. Biến môi trường (đã che giá trị)</figcaption></figure>
+  <figure class="shot"><img src="anh/B6_03_render_build_log.png" alt="Log build"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B6_03_render_build_log.png</code></div><figcaption>Hình 5.12. Log build thành công</figcaption></figure>
+  <figure class="shot"><img src="anh/B6_04_health_db.png" alt="Kết quả health db"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B6_04_health_db.png</code></div><figcaption>Hình 5.13. <code>/health/db</code> kết nối được cả hai DB</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B7</div><div>
+  <h3>Triển khai frontend: Render Static Site <span class="who">TV3</span></h3>
+  <ol><li><b>+ New → Static Site</b> → cùng repo.</li>
+  <li>Điền cấu hình như bảng dưới; biến <code>VITE_API_URL</code> = địa chỉ Web Service ở B6.</li>
+  <li><b>Redirects/Rewrites</b>: thêm quy tắc <code>/*</code> → <code>/index.html</code> (Rewrite) để mở thẳng được từng trang.</li></ol>
+  <dl class="cfg">
+    <dt>Root Directory</dt><dd>frontend</dd>
+    <dt>Build Command</dt><dd>npm ci &amp;&amp; npm run build</dd>
+    <dt>Publish Directory</dt><dd>dist</dd>
+  </dl>
+  <div class="shots"><figure class="shot"><img src="anh/B7_01_render_static_config.png" alt="Cấu hình Static Site"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B7_01_render_static_config.png</code></div><figcaption>Hình 5.14. Cấu hình Static Site</figcaption></figure>
+  <figure class="shot"><img src="anh/B7_02_trang_chu.png" alt="Trang chủ trên địa chỉ công khai"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B7_02_trang_chu.png</code></div><figcaption>Hình 5.15. Trang chủ trên địa chỉ công khai</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B8</div><div>
+  <h3>Kết nối, kiểm thử, tự động triển khai <span class="who">Cả nhóm</span></h3>
+  <ol><li>Đặt <code>CORS_ORIGINS</code> của backend = địa chỉ Static Site, deploy lại.</li>
+  <li>Thử đủ 5 chức năng trên máy tính và điện thoại.</li>
+  <li>Sửa một dòng chữ, push lên GitHub, xem tab <b>Events</b> của Render tự deploy bản mới.</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B8_01_render_events.png" alt="Tab Events"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B8_01_render_events.png</code></div><figcaption>Hình 5.16. Render tự deploy khi push</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="k">B9</div><div>
+  <h3>Giám sát và kiểm soát chi phí <span class="who">TV3</span></h3>
+  <ol><li>Hằng tuần xem Render <b>Metrics</b> và <b>Billing</b>, Supabase <b>Usage</b>, OpenRouter <b>Activity</b>; ghi vào nhật ký nhóm.</li>
+  <li>Không nhập thẻ cho Render, Supabase, AuraDB; màn hình nào đòi thẻ thì dừng lại.</li>
+  <li>Trước buổi demo: Resume AuraDB (tự dừng sau 3 ngày), mở dashboard Supabase, mở trang web 2–3 phút trước để Render khởi động.</li></ol>
+  <div class="shots"><figure class="shot"><img src="anh/B9_01_render_metrics.png" alt="Render Metrics"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B9_01_render_metrics.png</code></div><figcaption>Hình 5.17. Render Metrics: bộ nhớ dưới 512 MB</figcaption></figure>
+  <figure class="shot"><img src="anh/B9_02_billing.png" alt="Billing"><div class="ph">Ảnh chụp sẽ bổ sung<code>anh/B9_02_billing.png</code></div><figcaption>Hình 5.18. Chi phí hạ tầng 0 USD</figcaption></figure></div>
+</div></div>
+</section>
+
+<!-- 6 -->
+<section id="ket-qua">
+<h2><span class="no">6</span>Kết quả sau triển khai</h2>
+<p>Sản phẩm là một trang web gồm 4 trang. Phác thảo dưới đây dựa trên giao diện React đã viết; sau khi triển khai sẽ thay bằng ảnh chụp trên địa chỉ công khai <span class="fill">[https://….onrender.com]</span>.</p>
+
+<div class="mock-grid">
+  <div class="mock"><div class="bar"><i></i><i></i><i></i><span>…onrender.com/ · Hỏi đáp</span></div>
+    <div class="tabs"><b class="on">Hỏi đáp</b><b>Tra cứu</b><b>Đồ thị</b><b>Quản trị</b></div>
+    <div class="body">
+      <div class="input">Ô tô vượt đèn đỏ bị phạt bao nhiêu?</div>
+      <div class="row"><span class="muted">Ngày áp dụng</span><span class="ghost">01/10/2026</span><span class="btn">Hỏi</span></div>
+      <div class="ans"><b>Trả lời:</b> Phạt tiền từ 18.000.000 đến 20.000.000 đồng và bị trừ 4 điểm giấy phép lái xe.</div>
+      <div><b>Căn cứ</b> <span class="cit">ND168_2024.D6.K9.b · ND168_2024.D6.K16.b</span></div>
+      <div class="row"><span class="muted">Câu trả lời có hữu ích?</span><span class="ghost">Hữu ích</span><span class="ghost">Chưa đúng</span></div>
+    </div>
+    <div class="mock-cap">Hình 6.1. F1 Hỏi đáp và F4 Đánh giá</div></div>
+
+  <div class="mock"><div class="bar"><i></i><i></i><i></i><span>…onrender.com/documents · Tra cứu</span></div>
+    <div class="tabs"><b>Hỏi đáp</b><b class="on">Tra cứu</b><b>Đồ thị</b><b>Quản trị</b></div>
+    <div class="body">
+      <div class="row"><span class="ghost">Nghị định 168/2024/NĐ-CP ▾</span><span class="muted">Ngày</span><span class="ghost">01/10/2026</span></div>
+      <div><b>Điều 6.</b> Xử phạt, trừ điểm giấy phép lái xe của người điều khiển xe ô tô… vi phạm quy tắc giao thông đường bộ</div>
+      <div class="muted">3. Phạt tiền từ 800.000 đồng đến 1.000.000 đồng đối với…</div>
+      <div class="muted">m) Chở trẻ em dưới 10 tuổi và chiều cao dưới 1,35 mét trên xe ô tô ngồi cùng hàng ghế với người lái xe…</div>
+      <div class="cit">hiệu lực từ 01/01/2026 · sửa đổi bởi NĐ 238/2026</div>
+    </div>
+    <div class="mock-cap">Hình 6.2. F2 Tra cứu văn bản theo ngày</div></div>
+
+  <div class="mock"><div class="bar"><i></i><i></i><i></i><span>…onrender.com/graph · Đồ thị</span></div>
+    <div class="tabs"><b>Hỏi đáp</b><b>Tra cứu</b><b class="on">Đồ thị</b><b>Quản trị</b></div>
+    <div class="body">
+      <div class="row"><span class="muted">Mã điều khoản</span><span class="ghost mono">ND168_2024.D6.K3</span><span class="btn">Xem đồ thị</span></div>
+      <svg viewBox="0 0 320 120" aria-label="Đồ thị mẫu">
+        <line x1="160" y1="60" x2="60" y2="24" class="d-line"/><line x1="160" y1="60" x2="60" y2="98" class="d-line"/>
+        <line x1="160" y1="60" x2="262" y2="24" class="d-dash"/><line x1="160" y1="60" x2="262" y2="98" class="d-line"/>
+        <circle cx="160" cy="60" r="15" class="d-hl"/><text x="160" y="64" text-anchor="middle" class="d-s">K3</text>
+        <circle cx="60" cy="24" r="12" class="d-box"/><text x="60" y="28" text-anchor="middle" class="d-s">Đ6</text>
+        <circle cx="60" cy="98" r="12" class="d-box"/><text x="60" y="102" text-anchor="middle" class="d-s">m</text>
+        <circle cx="262" cy="24" r="12" class="d-box"/><text x="262" y="28" text-anchor="middle" class="d-s">238</text>
+        <circle cx="262" cy="98" r="12" class="d-box"/><text x="262" y="102" text-anchor="middle" class="d-s">Đ53</text>
+        <text x="200" y="30" class="d-l">SUA_DOI</text><text x="96" y="52" class="d-l">THUOC</text>
+      </svg>
+    </div>
+    <div class="mock-cap">Hình 6.3. F3 Đồ thị liên kết</div></div>
+
+  <div class="mock"><div class="bar"><i></i><i></i><i></i><span>…onrender.com/admin · Quản trị</span></div>
+    <div class="tabs"><b>Hỏi đáp</b><b>Tra cứu</b><b>Đồ thị</b><b class="on">Quản trị</b></div>
+    <div class="body">
+      <div class="row"><span class="muted">Mật khẩu quản trị</span><span class="ghost">••••••</span><span class="btn">Xem thống kê</span></div>
+      <div class="stats"><div><b>—</b>lượt hỏi</div><div><b>—</b>hữu ích</div><div><b>—</b>chưa đúng</div></div>
+      <div class="muted">Theo ngày (30 ngày gần nhất): số câu hỏi, thời gian TB (ms)</div>
+      <div class="muted">Câu trả lời bị đánh giá chưa đúng</div>
+    </div>
+    <div class="mock-cap">Hình 6.4. F5 Thống kê (số liệu có sau khi chạy)</div></div>
+</div>
+
+<h3>6.1. Hướng dẫn sử dụng</h3>
+<ol class="small">
+  <li>Mở địa chỉ trang web. Lần đầu sau thời gian nghỉ, máy chủ miễn phí cần khoảng 1 phút để khởi động; trang hiện thông báo "Đang kết nối máy chủ…".</li>
+  <li><b>Hỏi đáp:</b> gõ câu hỏi bằng tiếng Việt, đổi ngày áp dụng nếu muốn hỏi theo một thời điểm khác, bấm Hỏi. Bấm vào mã ở mục Căn cứ để xem nguyên văn; bấm Hữu ích hoặc Chưa đúng để góp ý.</li>
+  <li><b>Tra cứu:</b> chọn văn bản và ngày; danh sách chỉ hiện điều khoản còn hiệu lực tại ngày đó.</li>
+  <li><b>Đồ thị:</b> nhập mã điều khoản (ví dụ <code>ND168_2024.D6.K3</code>), bấm vào một nút để mở rộng.</li>
+  <li><b>Quản trị:</b> nhập mật khẩu quản trị để xem thống kê và các câu trả lời bị đánh giá chưa đúng.</li>
+</ol>
+<p class="small muted">Thông tin chỉ mang tính tham khảo; người dùng cần đối chiếu văn bản gốc trước khi áp dụng.</p>
+<h3>6.2. Tiêu chí đánh giá sau triển khai</h3>
+<ul class="small">
+  <li>Truy cập được từ mạng và thiết bị khác; đủ 5 chức năng chạy trên cloud.</li>
+  <li>Thời gian phản hồi một câu hỏi khi máy chủ đã khởi động; bộ nhớ backend dưới 512 MB.</li>
+  <li>Không có khóa hay mật khẩu trong mã nguồn; chi phí hạ tầng 0 USD, chi phí OpenRouter trong hạn mức.</li>
+</ul>
+</section>
+
+<!-- 7 -->
+<section id="ket-luan">
+<h2><span class="no">7</span>Kết luận và hướng phát triển</h2>
+<h3>7.1. Kết quả mong đợi</h3>
+<ul>
+  <li>Hệ thống GraphRAG của môn Xử lý ngôn ngữ tự nhiên chạy công khai trên cloud với đúng pipeline đã đánh giá, chi phí hạ tầng 0 USD.</li>
+  <li>Nhóm nắm được quy trình PaaS: kết nối GitHub, build Docker, biến môi trường, cơ sở dữ liệu quản lý sẵn, tự động triển khai và giám sát.</li>
+</ul>
+<h3>7.2. Hạn chế dự kiến</h3>
+<ul>
+  <li>Gói miễn phí tắt sau 15 phút không truy cập nên lần mở đầu chậm khoảng 1 phút; RAM 512 MB.</li>
+  <li>AuraDB và Supabase tự tạm dừng khi ít dùng, cần kích hoạt lại trước buổi demo.</li>
+  <li>Phụ thuộc OpenRouter: chậm hoặc hết hạn mức thì chức năng hỏi đáp dừng; tra cứu và đồ thị vẫn chạy.</li>
+</ul>
+<h3>7.3. Hướng phát triển</h3>
+<ul>
+  <li>Lưu đệm câu trả lời cho câu hỏi lặp lại để giảm chi phí và thời gian phản hồi.</li>
+  <li>Tự động cập nhật văn bản mới (cron job) khi có văn bản sửa đổi.</li>
+  <li>Tài khoản người dùng, giới hạn số lượt hỏi để chống lạm dụng.</li>
+  <li>Chuyển sang gói trả phí hoặc máy chủ riêng khi có nhiều người dùng; gắn tên miền riêng.</li>
+</ul>
+</section>
+
+<section id="tham-khao">
+<h2>Tài liệu tham khảo</h2>
+<ol class="refs">
+  <li>Render, <i>Pricing</i> và <i>Platforms with a real free tier for developers in 2026</i>. <a href="https://render.com/pricing">render.com/pricing</a> · <a href="https://render.com/articles/platforms-with-a-real-free-tier-for-developers-in-2026">render.com/articles</a></li>
+  <li>Render Docs, <i>Deploy a Docker image / Web Services / Static Sites</i>. <a href="https://render.com/docs">render.com/docs</a></li>
+  <li>Supabase, <i>Free plan</i> (tổng hợp CostBench). <a href="https://costbench.com/software/database-as-service/supabase/free-plan/">costbench.com</a></li>
+  <li>Neo4j, <i>AuraDB Free</i>. <a href="https://neo4j.com/free-graph-database/">neo4j.com/free-graph-database</a></li>
+  <li>OpenRouter, <i>Embeddings API</i>, <i>Rerank API</i>, <i>Team spend controls</i>. <a href="https://openrouter.ai/docs/api/reference/embeddings.md">embeddings</a> · <a href="https://openrouter.ai/docs/api/api-reference/rerank/create-rerank.md">rerank</a> · <a href="https://openrouter.ai/blog/tutorials/team-spend-controls-setup/">spend controls</a></li>
+  <li>Koyeb, <i>Pricing FAQ</i>. <a href="https://www.koyeb.com/docs/faqs/pricing">koyeb.com/docs/faqs/pricing</a></li>
+  <li>Hugging Face, <i>Spaces overview</i>. <a href="https://huggingface.co/docs/hub/spaces-overview">huggingface.co/docs</a></li>
+  <li>Findstack, <i>DigitalOcean free credit</i>. <a href="https://findstack.com/resources/digitalocean-free-credit">findstack.com</a></li>
+</ol>
+</section>
+
+<footer>Báo cáo sơ bộ · cập nhật 21/10/2026 · điều khoản gói miễn phí kiểm tra ngày 19/10/2026, có thể thay đổi khi tạo tài khoản.</footer>
+</main>
+</div>
+
+<script>
+document.querySelectorAll('figure.shot img').forEach(function(img){
+  var ok=function(){ if(img.naturalWidth>0) img.closest('figure').classList.add('ok'); };
+  if(img.complete) ok(); else img.addEventListener('load',ok);
+});
+</script>

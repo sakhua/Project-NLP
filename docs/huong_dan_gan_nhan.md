@@ -42,6 +42,7 @@ Mẫu đầy đủ, đã kiểm tra mã: `data/eval/questions_template.jsonl`.
 | `can_cu` | có | chuỗi | Căn cứ viết cho người đọc: "điểm b khoản 9, điểm b khoản 16 Điều 6 NĐ 168/2024" |
 | `nguoi_soan` | có | chuỗi | `TV1` / `TV2` / `TV3` |
 | `nguon` | có | chuỗi | `tu_viet` (tự đặt) · `llm_nhap` (LLM gợi ý, người sửa lại) · `vlsp` (lấy ý từ VLSP 2025) |
+| `nguon_sua_doi` | không | danh sách mã | Khi đáp án dựa vào nội dung đã sửa đổi: mã đơn vị của **văn bản sửa đổi** chứa nội dung mới, vd. `["ND238_2026.D2.K2"]` (mục 7) |
 | `cap_voi` | không | chuỗi | Với câu hiệu lực: id của câu cùng nội dung nhưng khác ngày |
 | `ghi_chu` | không | chuỗi | Giả định đã dùng, điểm còn băn khoăn |
 
@@ -70,7 +71,7 @@ hoặc phải đi theo một dẫn chiếu "theo quy định tại khoản… Đ
 > Gold: `ND168_2024.D6.K3.m`, `ND168_2024.D53.K2`
 >
 > (ngày 2026-09-01) cùng câu hỏi → Phạt 800.000–1.000.000 đồng theo điểm m khoản 3 Điều 6 NĐ 168, đã được NĐ 238/2026 sửa đổi.
-> Gold: `ND168_2024.D6.K3`, `ND168_2024.D6.K3.m`, `ND238_2026.D2.K2`
+> Gold: `ND168_2024.D6.K3`, `ND168_2024.D6.K3.m` · `nguon_sua_doi`: `ND238_2026.D2.K2`
 
 Nguồn gợi ý cho loại này (đã ghi trong `ghi_chu` của `data/manifest.csv`):
 NĐ 238/2026 sửa NĐ 168 (từ 15/08/2026, có điểm lùi tới 2028–2029) · Luật 118/2025 sửa Luật 36 (từ 01/07/2026) ·
@@ -110,8 +111,15 @@ So sánh hai đối tượng (ô tô và xe máy, hai mức tốc độ…) ho�
 1. Ghi **đơn vị nhỏ nhất đủ để trả lời**: có điểm thì ghi điểm (`ND168_2024.D6.K9.b`), khoản không có điểm thì ghi khoản, Điều không có khoản thì ghi Điều.
 2. Ghi **mọi** đơn vị cần thiết, kể cả khoản trừ điểm, khoản quy định tốc độ, khoản quy định hiệu lực. Thiếu một mã là Full Recall bị tính sai.
 3. Nếu mức tiền nằm ở **câu dẫn của khoản** và hành vi nằm ở **điểm**, chỉ cần ghi mã điểm (hệ thống đã gắn câu dẫn vào điểm); với câu `hieu_luc` sau sửa đổi thì ghi thêm mã khoản để rõ căn cứ mức tiền.
-4. Nội dung đến từ **văn bản sửa đổi**: ghi cả mã đơn vị gốc bị sửa (`ND168_2024.D6.K3.m`) **và** mã đơn vị của văn bản sửa đổi chứa nội dung mới (`ND238_2026.D2.K2`). Ở tuần 4, khi xử lý xong quan hệ sửa đổi, nhóm sẽ chạy script đổi sang mã phiên bản mới.
-5. Mã phải tồn tại trong `data/processed/corpus.jsonl`. Tra cứu bằng:
+4. Nội dung đến từ **văn bản sửa đổi** (thiết kế phiên bản: `docs/thiet_ke_do_thi.md`):
+   - `gold_ids` ghi **mã của văn bản bị sửa** (`ND168_2024.D6.K3.m`), vì hệ thống lưu mọi phiên bản dưới cùng một mã
+     và lọc theo ngày áp dụng. **Không** ghi mã của văn bản sửa đổi vào `gold_ids`.
+   - Ghi mã đơn vị của văn bản sửa đổi chứa câu lệnh/nội dung mới vào `nguon_sua_doi` (`["ND238_2026.D2.K2"]`).
+   - Khoản/điểm **được bổ sung mới** dùng mã mới theo văn bản bị sửa: "Bổ sung khoản 1a vào trước khoản 1 Điều 6"
+     → `ND168_2024.D6.K1a`; "Bổ sung điểm k1 vào sau điểm k khoản 4 Điều 41" → `ND168_2024.D41.K4.k1`.
+     Mã này chưa có trong `corpus.jsonl` cho tới khi bước 2 xử lý xong sửa đổi; `check_questions.py` chỉ cảnh báo nếu đã ghi `nguon_sua_doi`.
+   - Câu hỏi trước mốc sửa đổi (bản gốc còn hiệu lực) thì không cần `nguon_sua_doi`.
+5. Mã phải tồn tại trong `data/processed/corpus.jsonl` (hoặc `versions.jsonl`, trừ trường hợp mã bổ sung ở trên). Tra cứu bằng:
 
 ```
 python scripts/tim_dieu_khoan.py "đèn tín hiệu" --van-ban ND168_2024
