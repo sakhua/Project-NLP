@@ -11,13 +11,33 @@ import DatePicker from "../components/DatePicker.jsx";
 import { SUGGESTIONS } from "../lib/demo.js";
 import { fmtDate, fmtMs, fmtNum, uid } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
+import { nearBottom } from "../lib/scroll.js";
+
+const INTENT_LABEL = {
+  chao: "Lời chào", cam_on: "Lời cảm ơn", tam_biet: "Lời tạm biệt",
+  gioi_thieu: "Giới thiệu trợ lý", ngoai_pham_vi: "Ngoài phạm vi hỗ trợ",
+};
+
+// Lịch sử gửi kèm câu hỏi mới: chỉ các lượt hỏi đáp pháp luật đã trả lời xong (bỏ lời chào, câu ngoài phạm vi, câu lỗi),
+// tối đa 3 lượt gần nhất. Dùng để hiểu câu tiếp nối như "Còn xe máy thì sao?".
+function buildHistory(messages) {
+  const out = [];
+  for (let i = 1; i < messages.length; i++) {
+    const u = messages[i - 1], b = messages[i];
+    if (u.role !== "user" || b.role !== "assistant" || b.status !== "done" || !b.content) continue;
+    if (b.result?.intent && b.result.intent !== "luat") continue;
+    out.push({ role: "user", content: u.content }, { role: "assistant", content: b.content });
+  }
+  return out.slice(-6);
+}
 
 // Bộ điều khiển dừng của các câu đang trả lời (giữ ngoài component: trang được tạo lại khi chuyển sang cuộc trò chuyện mới)
 const controllers = new Map();
 
-const STEP_ORDER = ["rewrite", "search", "rerank", "graph", "context", "generate"];
+const STEP_ORDER = ["rewrite", "intent", "search", "rerank", "graph", "context", "generate"];
 const STEP_PENDING = {
   rewrite: "Đang hiểu câu hỏi theo ngữ cảnh…",
+  intent: "Đang phân loại câu hỏi…",
   search: "Đang tìm kiếm BM25 + vector…",
   rerank: "Đang lọc theo ngày áp dụng và xếp hạng…",
   graph: "Đang mở rộng trên đồ thị tri thức…",
@@ -76,14 +96,18 @@ function BotMessage({ msg, selected, onSelect, onCite, onRate, onRetry, hasHisto
         )}
         {msg.status === "done" && r && (
           <div className="msg-meta">
+            {r.intent && r.intent !== "luat" ? (
+              <span className="badge">{INTENT_LABEL[r.intent] || "Không cần tra cứu"}</span>
+            ) : (<>
             <button className="meta-pill" onClick={() => onSelect("sources")}><ListTree size={14} /> {units.length} căn cứ · {r.citations.length} trích dẫn</button>
             <button className="meta-pill" onClick={() => onSelect("graph")}><Waypoints size={14} /> {fromGraph} từ đồ thị</button>
             <button className="meta-pill" onClick={() => onSelect("steps")}><Workflow size={14} /> {fmtMs(r.latency_ms)}</button>
+            </>)}
             <span className="grow" />
             <button className="icon-btn" title="Sao chép" onClick={() => {
               navigator.clipboard?.writeText(msg.content); setCopied(true); setTimeout(() => setCopied(false), 1500);
             }}>{copied ? <Check size={15} /> : <Copy size={15} />}</button>
-            {r.log_id && (
+            {r.log_id && (!r.intent || r.intent === "luat") && (
               <>
                 <button className={`icon-btn ${msg.rating === 1 ? "on" : ""}`} title="Hữu ích" onClick={() => onRate(1)}><ThumbsUp size={15} /></button>
                 <button className={`icon-btn ${msg.rating === -1 ? "on" : ""}`} title="Chưa đúng" onClick={() => onRate(-1)}><ThumbsDown size={15} /></button>
@@ -134,14 +158,36 @@ export default function AskPage({ convId, convs, query }) {
   const [tab, setTab] = useState("sources");
   const [panelOpen, setPanelOpen] = useState(true);
   const [flash, setFlash] = useState(null);
-  const endRef = useRef(null);
+  const scrollRef = useRef(null);   // khung cuộn của danh sách tin nhắn
+  const stickRef = useRef(true);     // người dùng đang ở cuối khung → tự cuộn theo chữ mới
+  const createdRef = useRef(null);   // cuộc trò chuyện vừa tạo ở trang này (không xóa trạng thái khi URL đổi sang nó)
   const taRef = useRef(null);
   const messages = conv?.messages || [];
   const busy = messages.some((m) => m.status === "streaming");
   const lastBot = [...messages].reverse().find((m) => m.role === "assistant");
   const selMsg = messages.find((m) => m.id === sel) || lastBot;
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages.length, lastBot?.content?.length > 0, lastBot?.status]);
+  // Đổi sang cuộc trò chuyện khác (hoặc bấm "Cuộc trò chuyện mới"): đặt lại trạng thái trang, KHÔNG tạo lại trang.
+  // Khi vừa gửi câu đầu tiên, URL đổi từ #/chat sang #/chat/<id>: giữ nguyên mọi thứ để không bị nhảy.
+  const qs = query.toString();
+  const prevConv = useRef(convId);
+  useEffect(() => {
+    if (prevConv.current === convId) return;
+    prevConv.current = convId;
+    if (convId && convId === createdRef.current) return;
+    setSel(null); setTab("sources"); setFlash(null); setPanelOpen(true);
+    setInput(query.get("q") || "");
+    if (!convId) setDraftDate(query.get("date") || today());
+    stickRef.current = true;
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [convId, qs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tự cuộn xuống khi có tin nhắn mới hoặc chữ đang chạy, trừ khi người dùng đã cuộn lên để đọc.
+  const lastLen = (lastBot?.content?.length || 0) + (lastBot?.steps?.length || 0) + (lastBot?.status === "done" ? 1 : 0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages.length, lastLen]);
   useEffect(() => {
     const ta = taRef.current;
     if (ta) { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 180) + "px"; }
@@ -171,10 +217,9 @@ export default function AskPage({ convId, convs, query }) {
     if (q.length < 3 || busy) return;
     const d = presetDate || date;
     let cid = conv?.id;
-    if (!cid) cid = convs.create(q, d);
+    if (!cid) { cid = convs.create(q, d); createdRef.current = cid; }
     else if (presetDate) convs.update(cid, (c) => ({ ...c, date: d }));
-    const history = messages.filter((m) => m.status !== "error" && m.content)
-      .map((m) => ({ role: m.role, content: m.content })).slice(-6);
+    const history = buildHistory(messages);
     const botId = uid();
     convs.update(cid, (c) => ({
       ...c,
@@ -182,6 +227,7 @@ export default function AskPage({ convId, convs, query }) {
         { id: botId, role: "assistant", content: "", status: "streaming", steps: [], date: d }],
     }));
     setInput("");
+    stickRef.current = true;
     setSel(botId);
     setTab("sources");
     if (!conv) navigate("chat", cid);
@@ -192,8 +238,7 @@ export default function AskPage({ convId, convs, query }) {
     const i = messages.findIndex((m) => m.id === botId);
     const userMsg = messages[i - 1];
     if (!userMsg) return;
-    const history = messages.slice(0, i - 1).filter((m) => m.content && m.status !== "error")
-      .map((m) => ({ role: m.role, content: m.content })).slice(-6);
+    const history = buildHistory(messages.slice(0, i - 1));
     convs.update(conv.id, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === botId
       ? { ...m, status: "streaming", error: null, content: "", steps: [], context: null, result: null } : m)) }));
     run(conv.id, userMsg.content, userMsg.date || date, history, botId);
@@ -223,7 +268,7 @@ export default function AskPage({ convId, convs, query }) {
             </button>
           )}
         </div>
-        <div className="messages">
+        <div className="messages" ref={scrollRef} onScroll={(e) => { stickRef.current = nearBottom(e.currentTarget); }}>
           {messages.length === 0 ? (
             <Welcome date={date} onPick={(s) => send(s.question, s.date)} />
           ) : (
@@ -233,7 +278,6 @@ export default function AskPage({ convId, convs, query }) {
                 : <BotMessage key={m.id} msg={m} selected={selMsg?.id === m.id} hasHistory={i > 1}
                   onSelect={(t) => { setSel(m.id); setTab(t); setPanelOpen(true); }}
                   onCite={(id) => cite(m, id)} onRate={(v) => rate(m, v)} onRetry={() => retry(m.id)} />)}
-              <div ref={endRef} />
             </div>
           )}
         </div>

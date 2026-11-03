@@ -19,7 +19,9 @@ if hasattr(sys.stdout, "reconfigure"):
 BAT_BUOC = ["id", "loai", "ngay_ap_dung", "cau_hoi", "dap_an", "so_tien", "diem_tru", "gold_ids", "can_cu",
             "nguoi_soan", "nguon"]
 LOAI = {"don": 0.30, "multi_hop": 0.30, "hieu_luc": 0.25, "so_sanh": 0.15}
-NGUON = {"tu_viet", "llm_nhap", "vlsp"}
+NGUON = {"tu_viet", "llm_nhap", "vlsp", "tu_dong"}  # tu_dong: scripts/sinh_bo_test.py (chỉ để chạy thử)
+# Trạng thái rà soát bộ test tự động (docs/Huong_dan_ra_soat_bo_test.pdf); bộ câu tự viết không cần trường này
+TRANG_THAI = {"chua_duyet", "dat", "da_sua", "loai"}
 RE_SO_DIEU = re.compile(r"\b(Điều|khoản|điểm)\s+\d", re.IGNORECASE)
 
 
@@ -59,6 +61,10 @@ def main(paths: list[str]) -> int:
             loi.append(f"{v}: id bị trùng")
         if q.get("loai") not in LOAI:
             loi.append(f"{v}: loai phải là một trong {list(LOAI)}")
+        if "trang_thai" in q and q["trang_thai"] not in TRANG_THAI:
+            loi.append(f"{v}: trang_thai phải là một trong {sorted(TRANG_THAI)}")
+        if q.get("trang_thai") in ("dat", "da_sua", "loai") and not q.get("nguoi_duyet"):
+            canh_bao.append(f"{v}: đã rà soát (trang_thai={q['trang_thai']}) nhưng thiếu nguoi_duyet")
         if q.get("nguon") not in NGUON:
             loi.append(f"{v}: nguon phải là một trong {sorted(NGUON)}")
         try:
@@ -115,6 +121,8 @@ def main(paths: list[str]) -> int:
         dem = Counter(q.get("loai") for q in qs)
         print("Tỉ lệ loại: " + " · ".join(f"{k} {dem.get(k, 0)} ({dem.get(k, 0) / n:.0%}, mục tiêu {t:.0%})"
                                           for k, t in LOAI.items()))
+        if any("trang_thai" in q for q in qs):
+            print("Rà soát: " + " · ".join(f"{k} {c}" for k, c in sorted(Counter(q.get('trang_thai', '-') for q in qs).items())))
         print("Theo người soạn: " + " · ".join(f"{k} {c}" for k, c in sorted(Counter(q.get('nguoi_soan') for q in qs).items())))
     for m in loi:
         print("LỖI      ", m)

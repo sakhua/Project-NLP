@@ -22,6 +22,7 @@ from collections.abc import Iterator
 from datetime import date
 
 from graphrag.common.ids import base_id
+from graphrag.pipeline import intent as intent_mod
 from graphrag.pipeline import prompts
 from graphrag.pipeline.conversation import rewrite_question
 from graphrag.retrieval.fusion import rrf
@@ -33,6 +34,7 @@ NO_CONTEXT_ANSWER = "Không tìm thấy quy định áp dụng trong các văn b
 
 # Nhãn các bước hiển thị trên giao diện (tab "Quy trình")
 STEPS = {
+    "intent": "Phân loại câu hỏi",
     "rewrite": "Hiểu câu hỏi theo ngữ cảnh hội thoại",
     "search": "Tìm kiếm lai BM25 + vector, gộp RRF",
     "rerank": "Lọc theo ngày áp dụng và xếp hạng lại",
@@ -184,11 +186,35 @@ def run(res, question: str, ngay: date | None = None, history: list[dict] | None
         steps.append({k: v for k, v in ev.items() if k != "type"})
         return ev
 
-    # 0. Hội thoại
+    # 0a. Câu xã giao (chào, cảm ơn…) hoặc có từ khóa giao thông: nhận ra ngay bằng luật trên câu gốc
     t0 = time.perf_counter()
-    q = rewrite_question(res.llm, history, question, cfg.get("conversation", {}).get("history_turns", 3))
-    if history:
-        yield step("rewrite", t0, "Câu hỏi đã đầy đủ" if q == question.strip() else f"Hiểu là: {q}", question=q)
+    label, how = intent_mod.classify(question, llm=None)
+    q = question.strip()
+    # 0b. Hội thoại: viết lại câu tiếp nối thành câu đầy đủ (vd. "còn xe máy thì sao?")
+    if label == intent_mod.LUAT and history:
+        t1 = time.perf_counter()
+        q = rewrite_question(res.llm, history, question, cfg.get("conversation", {}).get("history_turns", 3))
+        yield step("rewrite", t1, "Câu hỏi đã đầy đủ" if q == question.strip() else f"Hiểu là: {q}", question=q)
+    # 0c. Chưa chắc (không có từ khóa): phân loại câu đã viết lại, cần thì hỏi LLM
+    if label == intent_mod.LUAT and how != "luật":
+        t0 = time.perf_counter()
+        label, how = intent_mod.classify(q, llm=res.llm if cfg.get("intent", {}).get("use_llm", True) else None)
+    yield step("intent", t0, f"{intent_mod.LABELS[label]} (xác định bằng {how})", intent=label)
+
+    if label != intent_mod.LUAT:          # không tra cứu: trả lời mẫu
+        answer_text = intent_mod.REPLIES[label]
+        if stream:
+            for part in re.split(r"(\s+)", answer_text):
+                if part:
+                    yield {"type": "token", "text": part}
+        yield {
+            "type": "done", "intent": label,
+            "question": question, "question_rewritten": q if q != question.strip() else None,
+            "date": ngay.isoformat(), "answer": answer_text, "citations": [], "unknown_citations": [],
+            "units": [], "graph": {"nodes": [], "edges": []}, "notes": [], "retrieved_ids": [], "steps": steps,
+            "latency_s": round(time.perf_counter() - t_start, 3),
+        }
+        return
 
     # 1a. Tìm kiếm lai
     t0 = time.perf_counter()
@@ -303,7 +329,7 @@ def run(res, question: str, ngay: date | None = None, history: list[dict] | None
     for u in out_units:
         u["cited"] = u["id"] in citations
     yield {
-        "type": "done",
+        "type": "done", "intent": intent_mod.LUAT,
         "question": question, "question_rewritten": q if q != question.strip() else None,
         "date": ngay.isoformat(), "answer": answer_text, "citations": citations, "unknown_citations": unknown,
         "units": out_units, "graph": _graph_payload(out_units, chosen, citations), "notes": _notes_out(notes),

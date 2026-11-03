@@ -98,7 +98,7 @@ export default function App() {
         <ServerStatus />
       </aside>
       <main className="main">
-        {page === "chat" && <AskPage key={route.param || "new"} convId={route.param} convs={convs} query={route.query} />}
+        {page === "chat" && <AskPage convId={route.param} convs={convs} query={route.query} />}
         {page === "docs" && <DocumentsPage docId={route.param} query={route.query} />}
         {page === "history" && <HistoryPage uid={route.param} />}
         {page === "graph" && <GraphPage uid={route.param} />}

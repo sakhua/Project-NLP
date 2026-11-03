@@ -5,41 +5,78 @@ import { api } from "../api.js";
 import ContextGraph, { EDGE_COLORS, NODE_COLORS } from "../components/ContextGraph.jsx";
 import { CAP_LABEL, EDGE_LABEL, fmtDate, longLabel, shortLabel, VERSION_LABEL } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
+import { readRecent, rememberRecent } from "../lib/recent.js";
 
 const START = "ND168_2024.D6.K9.b";
 const EDGE_TYPES = ["THAM_CHIEU", "THUOC", "SUA_DOI", "BO_SUNG", "THAY_THE", "BAI_BO", "HUONG_DAN"];
 
-function SearchBox({ onPick }) {
+// Gợi ý khi chưa gõ gì: các điều khoản hay dùng khi demo (đều có nhiều liên kết trên đồ thị)
+const SUGGESTED = [
+  { id: "ND168_2024.D6.K9.b", d: "Ô tô không chấp hành đèn tín hiệu (vượt đèn đỏ)" },
+  { id: "ND168_2024.D6.K16.b", d: "Ô tô bị trừ 04 điểm giấy phép lái xe" },
+  { id: "ND168_2024.D6.K11.a", d: "Ô tô có nồng độ cồn vượt quá 80 mg/100 ml máu" },
+  { id: "ND168_2024.D6.K3.m", d: "Chở trẻ em dưới 10 tuổi ngồi cùng hàng ghế người lái (đã sửa đổi)" },
+  { id: "ND168_2024.D7.K7.c", d: "Xe máy không chấp hành đèn tín hiệu" },
+  { id: "TT38_2024.D6.K1", d: "Tốc độ tối đa trong khu vực đông dân cư" },
+  { id: "L36_2024.D58.K3", d: "Phục hồi điểm khi giấy phép lái xe bị trừ hết điểm" },
+];
+function SearchBox({ onPick, current }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [hl, setHl] = useState(0);
+  const typing = q.trim().length >= 2;
+
   useEffect(() => {
-    if (q.trim().length < 2) { setRes([]); return; }
-    const t = setTimeout(() => api.search(q.trim(), 12).then((r) => { setRes(r); setHl(0); }).catch(() => setRes([])), 250);
+    if (!typing) { setRes([]); setLoading(false); return; }
+    setLoading(true);
+    const t = setTimeout(() => api.search(q.trim(), 12)
+      .then((r) => { setRes(r); setHl(0); }).catch(() => setRes([])).finally(() => setLoading(false)), 250);
     return () => clearTimeout(t);
-  }, [q]);
-  const pick = (r) => { onPick(r.id); setOpen(false); setQ(""); };
+  }, [q, typing]);
+
+  // Danh sách hiển thị: đang gõ → kết quả tìm; chưa gõ → gần đây + gợi ý
+  const items = useMemo(() => {
+    if (typing) return res.map((r) => ({ id: r.id, t: r.ten, d: r.noi_dung, group: "Kết quả" }));
+    const recent = readRecent().filter((id) => id !== current).slice(0, 4)
+      .map((id) => ({ id, t: longLabel(id), d: SUGGESTED.find((x) => x.id === id)?.d || shortLabel(id), group: "Xem gần đây" }));
+    const seen = new Set(recent.map((x) => x.id));
+    const sugg = SUGGESTED.filter((x) => !seen.has(x.id) && x.id !== current)
+      .map((x) => ({ id: x.id, t: longLabel(x.id), d: x.d, group: "Gợi ý" }));
+    return [...recent, ...sugg];
+  }, [typing, res, open, current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (it) => { onPick(it.id); setOpen(false); setQ(""); };
   return (
-    <div className="float-card" style={{ position: "relative", width: 420, padding: 6 }}>
+    <div className="float-card" style={{ position: "relative", width: 440, padding: 6 }}>
       <div className="search-box">
         <Search size={15} />
-        <input className="input" style={{ border: 0, boxShadow: "none" }} value={q} placeholder="Tìm điều khoản theo mã hoặc nội dung…"
-          onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        <input className="input" style={{ border: 0, boxShadow: "none" }} value={q}
+          placeholder="Tìm theo mã hoặc nội dung, vd. vượt đèn đỏ"
+          onFocus={() => { setOpen(true); setHl(0); }} onBlur={() => setTimeout(() => setOpen(false), 150)}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") setHl((h) => Math.min(h + 1, res.length - 1));
-            if (e.key === "ArrowUp") setHl((h) => Math.max(h - 1, 0));
-            if (e.key === "Enter" && res[hl]) pick(res[hl]);
+            if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, items.length - 1)); }
+            if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
+            if (e.key === "Enter" && items[hl]) pick(items[hl]);
+            if (e.key === "Escape") { setOpen(false); e.currentTarget.blur(); }
           }} />
       </div>
-      {open && res.length > 0 && (
+      {open && (
         <div className="float-card results">
-          {res.map((r, i) => (
-            <button key={r.id} className={`result ${i === hl ? "hl" : ""}`} onMouseDown={() => pick(r)}>
-              <div className="t">{r.ten}</div>
-              <div className="d">{r.noi_dung}</div>
-            </button>
+          {typing && loading && res.length === 0 && <div className="result-note">Đang tìm…</div>}
+          {typing && !loading && res.length === 0 && (
+            <div className="result-note">Không tìm thấy điều khoản nào. Thử gõ có dấu, hoặc gõ mã như ND168_2024.D6.K9</div>
+          )}
+          {items.map((it, i) => (
+            <div key={it.id + it.group}>
+              {(i === 0 || items[i - 1].group !== it.group) && <div className="result-group">{it.group}</div>}
+              <button className={`result ${i === hl ? "hl" : ""}`} onMouseEnter={() => setHl(i)} onMouseDown={() => pick(it)}>
+                <div className="t">{it.t}</div>
+                <div className="d">{it.d}</div>
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -78,7 +115,7 @@ export default function GraphPage({ uid }) {
     } catch (e) { setErr(e.message); }
   }, []);
 
-  useEffect(() => { expand(focusId, true); setSel(focusId); }, [focusId, expand]);
+  useEffect(() => { expand(focusId, true); setSel(focusId); rememberRecent(focusId); }, [focusId, expand]);
   useEffect(() => {
     if (!sel) return;
     setDetail(null);
@@ -109,7 +146,7 @@ export default function GraphPage({ uid }) {
       <div className="canvas-wrap">
         <ContextGraph elements={elements} layout="concentric" cyRef={cyRef} maxZoom={1.15} onTap={setSel} onDblTap={(id) => { setSel(id); expand(id); }} />
         <div className="float-bar">
-          <SearchBox onPick={(id) => navigate("graph", id)} />
+          <SearchBox onPick={(id) => navigate("graph", id)} current={focusId} />
           <span className="grow" />
           <div className="float-card" style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--text-2)" }}>
             {Object.keys(nodes).length} node · {Object.keys(edges).length} cạnh · <b>bấm đúp</b> để mở rộng

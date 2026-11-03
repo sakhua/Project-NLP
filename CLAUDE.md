@@ -53,9 +53,14 @@ python scripts/thu_prompt.py           # thử prompt sinh câu trả lời vớ
 
 # Đánh giá (chưa xong)
 python -m graphrag.evaluation.run_eval --systems B1 B2 B3 GRAPH
+# Bộ test tự động 200 câu (sinh từ versions.jsonl, KHÔNG phải bộ chính thức) + chạy GraphRAG thật và chấm
+python scripts/sinh_bo_test.py                        # → data/eval/bo_test_tu_dong.jsonl (không ghi đè file đã rà soát)
+python scripts/ra_soat.py tach|tien_do|doc_cheo|gop    # rà soát 200 câu theo docs/Huong_dan_ra_soat_bo_test.pdf
+python scripts/chay_bo_test.py [--gioi-han 20] [--tiep]   # → data/eval/ket_qua/bao_cao_*.md/.csv
+python scripts/chay_bo_test.py --cham-lai <ket_qua_*.jsonl> --ragas   # thêm Faithfulness, Answer Relevance, Context P/R (pip install -e ".[ragas]")
 
 # Web trên máy (demo): một lệnh bật Docker + backend + frontend, hoặc làm tay 2 dòng dưới
-powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1        # bản build, không tự tải lại trang; thêm -Dev khi sửa giao diện
 uvicorn backend.app.main:app --reload                 # http://localhost:8000/docs (cần pip install -e ".[api]")
 cd frontend && npm install && npm run dev             # http://localhost:5173 (npm run build để build; frontend chưa có test/lint)
 python scripts/kiem_tra_demo.py                       # chạy thử 10 câu demo (data/demo/cau_hoi_demo.json), kịch bản: docs/kich_ban_demo.md

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, History, ListTree, TriangleAlert, Waypoints, Workflow, X } from "lucide-react";
 import { navigate } from "../lib/router.js";
+import { scrollIntoContainer } from "../lib/scroll.js";
 import { EDGE_LABEL, fmtDate, fmtMs, shortLabel, VERSION_LABEL } from "../lib/format.js";
 import ContextGraph, { EDGE_COLORS, NODE_COLORS } from "./ContextGraph.jsx";
 
@@ -19,7 +20,7 @@ function viaText(u) {
 export function SourceCard({ u, flash, date }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  useEffect(() => { if (flash) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [flash]);
+  useEffect(() => { if (flash) scrollIntoContainer(ref.current, ref.current?.closest(".panel-body")); }, [flash]);
   const ctx = (u.ngu_canh || "").split(" – ").slice(-1)[0];
   return (
     <div ref={ref} className={`src ${u.cited ? "cited" : ""} ${flash ? "flash" : ""}`} id={`src-${u.id}`}>
@@ -152,8 +153,11 @@ export default function AnswerPanel({ msg, tab, setTab, flashId, onClose }) {
       </div>
       <div className="panel-body" style={tab === "graph" ? { display: "flex", flexDirection: "column" } : undefined}>
         {!msg && <div className="empty">Chọn một câu trả lời để xem căn cứ</div>}
-        {msg && tab === "sources" && <SourcesTab units={units} notes={notes} citations={msg.result?.citations} flashId={flashId} date={date} />}
-        {msg && tab === "graph" && <GraphTab graph={graph} units={units} />}
+        {msg?.result?.intent && msg.result.intent !== "luat" && tab !== "steps" && (
+          <div className="empty">Câu này không phải câu hỏi pháp luật giao thông nên hệ thống không tra cứu văn bản.</div>
+        )}
+        {msg && tab === "sources" && !(msg.result?.intent && msg.result.intent !== "luat") && <SourcesTab units={units} notes={notes} citations={msg.result?.citations} flashId={flashId} date={date} />}
+        {msg && tab === "graph" && !(msg.result?.intent && msg.result.intent !== "luat") && <GraphTab graph={graph} units={units} />}
         {msg && tab === "steps" && <StepsTab steps={msg.steps || []} result={msg.result} units={units} />}
       </div>
     </aside>

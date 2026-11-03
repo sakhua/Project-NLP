@@ -94,7 +94,7 @@ def test_answer_seed_graph_and_citations(res):
     assert out["citations"] == ["ND168_2024.D6.K9.b", "ND168_2024.D6.K16.b"]
     assert out["unknown_citations"] == ["XX1_2024.D1"]
     assert {e["type"] for e in out["graph"]["edges"]} == {"THAM_CHIEU", "THUOC"}
-    assert [s["key"] for s in out["steps"]] == ["search", "rerank", "graph", "context", "generate"]
+    assert [s["key"] for s in out["steps"]] == ["intent", "search", "rerank", "graph", "context", "generate"]
 
 
 def test_not_yet_valid_note(res):
@@ -120,7 +120,7 @@ def test_graph_failure_still_answers(res, monkeypatch):
     monkeypatch.setattr(graph_rag.neo4j_store, "expand_paths", boom)
     out = graph_rag.answer(res, "Ô tô vượt đèn đỏ bị phạt bao nhiêu?", ngay=D("2026-09-01"))
     assert out["answer"] and all(u["origin"] == "seed" for u in out["units"])
-    assert "Neo4j lỗi" in out["steps"][2]["detail"]
+    assert "Neo4j lỗi" in next(s for s in out["steps"] if s["key"] == "graph")["detail"]
 
 
 def test_amend_instructions_excluded():
@@ -138,3 +138,57 @@ def test_query_expansion():
     q = expand("Xe máy vượt đèn đỏ bị phạt bao nhiêu?")
     assert "không chấp hành hiệu lệnh của đèn tín hiệu giao thông" in q and "xe mô tô xe gắn máy" in q
     assert expand("Thủ tục đăng ký kết hôn") == "Thủ tục đăng ký kết hôn"
+
+
+# ---------------- Phân loại câu hỏi ----------------
+from graphrag.pipeline import intent as intent_mod  # noqa: E402
+
+
+class LabelLLM:
+    def __init__(self, label):
+        self.label, self.calls = label, 0
+
+    def generate(self, system, user):
+        self.calls += 1
+        return self.label
+
+
+@pytest.mark.parametrize("q,label", [
+    ("Xin chào", "chao"), ("chào bạn nhé", "chao"), ("hello", "chao"), ("Cảm ơn bạn nhiều!", "cam_on"),
+    ("tạm biệt", "tam_biet"), ("Bạn là ai?", "gioi_thieu"), ("ban lam duoc gi", "gioi_thieu"),
+])
+def test_social_by_rules(q, label):
+    llm = LabelLLM("NGOAI")
+    assert intent_mod.classify(q, llm) == (label, "luật") and llm.calls == 0
+
+
+@pytest.mark.parametrize("q", ["Ô tô vượt đèn đỏ bị phạt bao nhiêu?", "Còn xe máy thì sao?", "bằng lái bị trừ hết điểm",
+                               "Xin chào, chạy quá tốc độ 20 km/h phạt bao nhiêu?", "uong ruou lai xe phat bao nhieu"])
+def test_traffic_by_keywords(q):
+    llm = LabelLLM("NGOAI")
+    assert intent_mod.classify(q, llm) == ("luat", "luật") and llm.calls == 0
+
+
+def test_off_topic_uses_llm():
+    assert intent_mod.classify("Giá vàng hôm nay bao nhiêu?", LabelLLM("NGOAI")) == ("ngoai_pham_vi", "LLM")
+    assert intent_mod.classify("Có nên mua cổ phiếu VNM không?", LabelLLM("NGOAI")) == ("ngoai_pham_vi", "LLM")
+    assert intent_mod.classify("Quy định này áp dụng từ khi nào?", LabelLLM("LUAT")) == ("luat", "LLM")
+
+
+def test_llm_error_does_not_block():
+    class Broken:
+        def generate(self, s, u):
+            raise RuntimeError("down")
+    assert intent_mod.classify("Thủ tục công chứng?", Broken()) == ("luat", "mặc định")
+
+
+def test_pipeline_greeting_and_off_topic_skip_retrieval(res):
+    res.bm25 = SimpleNamespace(search=lambda q, k=50: pytest.fail("không được tra cứu"))
+    out = graph_rag.answer(res, "Xin chào")
+    assert out["intent"] == "chao" and out["units"] == [] and "Xin chào" in out["answer"]
+    evs = list(graph_rag.run(res, "Cảm ơn nhé", stream=True))
+    assert [e["type"] for e in evs][0] == "step" and evs[-1]["intent"] == "cam_on"
+    assert "".join(e["text"] for e in evs if e["type"] == "token") == evs[-1]["answer"]
+    res.llm = LabelLLM("NGOAI")
+    out = graph_rag.answer(res, "Giá vàng hôm nay thế nào?")
+    assert out["intent"] == "ngoai_pham_vi" and "không thuộc phạm vi" in out["answer"]

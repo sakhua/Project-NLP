@@ -91,11 +91,14 @@ Câu hỏi: **"Chở trẻ em dưới 10 tuổi ngồi ghế trước ô tô b�
 - Chỉ trình bày nếu chạy thử hôm trước ra **ĐẠT**.
 - **Đáp án đúng:** tốc độ tối đa 60 km/h (khoản 1 Điều 6 TT 38/2024) → vượt 15 km/h → phạt 4.000.000 – 6.000.000 đồng (điểm đ khoản 5 Điều 6 NĐ 168/2024), trừ 02 điểm.
 
-### Màn 8. Không bịa khi ngoài phạm vi: D10 (20 giây)
+### Màn 8. Lọc câu hỏi: chào hỏi và ngoài phạm vi: D11, D12, D10 (40 giây)
 
-- **Bấm gì:** gõ `Thủ tục đăng ký kết hôn cần những giấy tờ gì?`
-- **Kết quả đúng:** "Không tìm thấy quy định áp dụng trong các văn bản được cung cấp."
-- **Nói gì:** "*Mô hình chỉ được trả lời từ ngữ cảnh*, không có căn cứ thì nói không biết."
+- **Bấm gì:** cuộc trò chuyện mới, lần lượt gõ `Xin chào`, `Giá vàng hôm nay bao nhiêu?`, `Thủ tục đăng ký kết hôn cần những giấy tờ gì?`
+- **Kết quả đúng:**
+  - "Xin chào": chào lại, giới thiệu phạm vi, gợi ý câu hỏi; nhãn "Lời chào".
+  - Hai câu sau: "Câu hỏi này không thuộc phạm vi hỗ trợ…" kèm gợi ý; nhãn "Ngoài phạm vi hỗ trợ".
+- **Nói gì:** "*Trước khi tra cứu, hệ thống phân loại câu hỏi*: câu chào và câu có từ khóa giao thông nhận ra ngay bằng luật,
+  câu còn lại mới hỏi LLM. Câu ngoài phạm vi không chạy tìm kiếm, không tốn embedding và không bịa câu trả lời."
 
 ### Màn 9. Các trang tra cứu (1,5 phút)
 
@@ -123,7 +126,9 @@ Câu hỏi: **"Chở trẻ em dưới 10 tuổi ngồi ghế trước ô tô b�
 | D7 | Đồ thị | Lái ô tô mà nồng độ cồn vượt quá 0,4 miligam/1 lít khí thở bị xử phạt thế nào? | hôm nay | 30 – 40 triệu đồng (Đ6.K11.a), tước GPLX 22 – 24 tháng (Đ6.K15.c) |
 | D8 | Nhiều bước | Ô tô con chạy 75 km/h trên đường đôi trong khu đông dân cư thì bị phạt thế nào? | hôm nay | Tối đa 60 km/h (TT 38 Đ6.K1) → 4 – 6 triệu đồng (Đ6.K5.đ), trừ 02 điểm |
 | D9 | Thủ tục | Giấy phép lái xe bị trừ hết điểm thì làm thế nào để được phục hồi? | hôm nay | Sau ít nhất 06 tháng, kiểm tra kiến thức đạt → phục hồi 12 điểm (Luật 36 Đ58.K3) |
-| D10 | Ngoài phạm vi | Thủ tục đăng ký kết hôn cần những giấy tờ gì? | hôm nay | Không tìm thấy quy định áp dụng |
+| D10 | Ngoài phạm vi | Thủ tục đăng ký kết hôn cần những giấy tờ gì? | hôm nay | "Không thuộc phạm vi hỗ trợ", gợi ý câu hỏi phù hợp |
+| D11 | Lời chào | Xin chào | hôm nay | Chào lại, giới thiệu phạm vi, gợi ý câu hỏi |
+| D12 | Ngoài phạm vi | Giá vàng hôm nay bao nhiêu? | hôm nay | "Không thuộc phạm vi hỗ trợ" |
 
 Đáp án đã đối chiếu với nội dung trong `data/processed/versions.jsonl`. Nếu thầy hỏi câu ngoài danh sách, cứ gõ thẳng: hệ thống hoạt động với mọi câu, chỉ là chưa chạy thử trước.
 
@@ -133,7 +138,7 @@ Câu hỏi: **"Chở trẻ em dưới 10 tuổi ngồi ghế trước ô tô b�
 |---|---|
 | Khác gì RAG thông thường? | RAG chỉ lấy đoạn giống câu hỏi. GraphRAG lấy thêm điều khoản liên quan qua cạnh dẫn chiếu, cấu trúc (màn 4, 6) và lọc phiên bản theo ngày (màn 5). Phần so sánh định lượng với B1–B3 làm ở tuần sau. |
 | Làm sao biết câu trả lời đúng? | Mọi ý đều có trích dẫn bấm được để xem nguyên văn. Bộ câu hỏi đánh giá (~200 câu, có đáp án và mã điều khoản đúng) đang soạn theo hướng dẫn gán nhãn. |
-| Mô hình có bịa không? | Prompt bắt chỉ dùng ngữ cảnh; mã trích dẫn không có trong ngữ cảnh bị đánh dấu đỏ; câu ngoài phạm vi trả "không tìm thấy" (màn 8). |
+| Mô hình có bịa không? | Câu ngoài phạm vi bị lọc trước khi tra cứu (màn 8); prompt bắt chỉ dùng ngữ cảnh; mã trích dẫn không có trong ngữ cảnh bị đánh dấu đỏ; không có quy định thì trả "không tìm thấy". |
 | Luật mới ban hành thì sao? | Thêm .docx + 1 dòng manifest.csv, chạy lại 4 script (01→04, dưới 10 phút). Văn bản sửa đổi được tách tự động thành thao tác sửa đổi và phiên bản mới. |
 | Đồ thị dựng thế nào, có dùng LLM không? | Không dùng LLM. Cấu trúc và dẫn chiếu tách bằng regex + máy trạng thái (1.733 dẫn chiếu, 397 thao tác sửa đổi). |
 | Vì sao có hai CSDL? | PostgreSQL giữ nội dung, embedding, phiên bản, lọc theo ngày bằng SQL; Neo4j giữ quan hệ để đi theo đồ thị. Hai kho nối bằng mã điều khoản chung. |

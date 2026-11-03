@@ -5,6 +5,7 @@ import { api, today } from "../api.js";
 import DatePicker from "../components/DatePicker.jsx";
 import { fmtDate, fmtNum, longLabel, VERSION_LABEL } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
+import { scrollIntoContainer } from "../lib/scroll.js";
 
 const ROLE = { goc: ["Văn bản gốc", "accent"], sua_doi: ["Sửa đổi", "warn"], doi_chieu: ["Đối chiếu", ""] };
 
@@ -59,7 +60,10 @@ export default function DocumentsPage({ docId, query }) {
     api.units(docId, date).then(setUnits).catch((e) => setError(e.message));
   }, [docId, date]);
   useEffect(() => {
-    if (focus && units) setTimeout(() => refMap.current[focus]?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+    if (focus && units) setTimeout(() => {
+      const el = refMap.current[focus];
+      scrollIntoContainer(el, el?.closest(".split-right"));
+    }, 60);
   }, [focus, units]);
 
   const shown = useMemo(() => {
