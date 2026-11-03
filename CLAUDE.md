@@ -55,7 +55,7 @@ python scripts/thu_prompt.py           # thử prompt sinh câu trả lời vớ
 python -m graphrag.evaluation.run_eval --systems B1 B2 B3 GRAPH
 # Bộ test tự động 200 câu (sinh từ versions.jsonl, KHÔNG phải bộ chính thức) + chạy GraphRAG thật và chấm
 python scripts/sinh_bo_test.py                        # → data/eval/bo_test_tu_dong.jsonl (không ghi đè file đã rà soát)
-python scripts/ra_soat.py tach|tien_do|doc_cheo|gop    # rà soát 200 câu theo docs/Huong_dan_ra_soat_bo_test.pdf
+streamlit run scripts/ra_soat_app.py                  # giao diện rà soát/sửa bộ câu golden, bấm Lưu ghi thẳng vào JSONL
 python scripts/chay_bo_test.py [--gioi-han 20] [--tiep]   # → data/eval/ket_qua/bao_cao_*.md/.csv
 python scripts/chay_bo_test.py --cham-lai <ket_qua_*.jsonl> --ragas   # thêm Faithfulness, Answer Relevance, Context P/R (pip install -e ".[ragas]")
 

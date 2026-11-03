@@ -23,3 +23,6 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 frontend/.env.local
+
+# Bản sao lưu tự động của giao diện rà soát (scripts/ra_soat_app.py)
+data/eval/sao_luu/
