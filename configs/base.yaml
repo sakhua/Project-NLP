@@ -20,6 +20,7 @@ reranker:
 
 llm:
   provider: openrouter
+  nha_cung_cap: [openai, openrouter]   # chat: dùng OpenAI trước; khóa hết tiền/hạn mức thì chuyển hẳn sang khóa sau. Embedding, rerank luôn qua OpenRouter
   model: openai/gpt-4o-mini   # mô hình sinh câu trả lời, dùng chung cho B1–B3 và GraphRAG
   temperature: 0.0
   max_tokens: 1024
@@ -39,6 +40,27 @@ graph:
 
 conversation:
   history_turns: 3   # số lượt hỏi đáp gần nhất dùng để hiểu câu hỏi tiếp nối ("còn xe máy thì sao?")
+
+ms_graphrag:            # baseline B2: GraphRAG kiểu Microsoft (scripts/05_ms_graphrag_index.py, pipeline/ms_graphrag.py)
+  model: openai/gpt-4o-mini   # mô hình trích thực thể, tóm tắt, viết báo cáo cộng đồng, map/reduce của global search
+  max_tokens: 3000
+  gleaning: 0                 # số vòng hỏi lại thực thể bị sót (bản gốc dùng 1; tăng chi phí trích xuất gấp đôi)
+  nguong_tom_tat: 200         # sau khi bỏ mô tả trùng, còn ≥ 2 mô tả và nối lại dài hơn (ký tự) thì nhờ LLM tóm tắt
+  max_cluster_size: 10        # cộng đồng lớn hơn được chia tiếp ở cấp sau (như bản gốc)
+  max_level: 3
+  # local search
+  top_k_entities: 10          # thực thể khớp câu hỏi (vector trên mô tả thực thể)
+  hops: 1                     # mở rộng sang thực thể lân cận theo quan hệ (0 = không mở rộng)
+  max_neighbors: 10
+  max_relations: 25
+  top_communities: 3          # số báo cáo cộng đồng đưa vào ngữ cảnh
+  top_k_units: 10             # số điều khoản đưa vào ngữ cảnh (bằng top_k_final của hai hệ thống còn lại)
+  max_graph_chars: 4000       # độ dài tối đa phần thông tin đồ thị (thực thể, quan hệ, cộng đồng) trong prompt
+  # global search
+  global_level: 0
+  global_top_communities: 24
+  global_batch: 6             # số báo cáo mỗi lượt map
+  global_top_points: 20
 
 evaluation:
   ks: [5, 10]

@@ -296,12 +296,18 @@ def stats(conn, days: int = 30) -> dict:
         cur.execute("""SELECT id, thoi_gian, cau_hoi, tra_loi, ghi_chu FROM hoi_dap_log
                        WHERE danh_gia = -1 ORDER BY thoi_gian DESC LIMIT 20""")
         bi_danh_gia_sai = _rows(cur)
-        cur.execute("""SELECT id, thoi_gian, cau_hoi, ngay_ap_dung, latency_ms, danh_gia,
+        cur.execute("""SELECT id, thoi_gian, cau_hoi, ngay_ap_dung, latency_ms, danh_gia, he_thong,
                               cardinality(trich_dan) AS so_trich_dan
                        FROM hoi_dap_log ORDER BY thoi_gian DESC LIMIT 30""")
         gan_day = _rows(cur)
+        cur.execute("""SELECT coalesce(he_thong, 'GRAPH') AS he_thong, count(*) AS so_cau,
+                              round(avg(latency_ms)) AS tb_ms, round(avg(cardinality(trich_dan)), 1) AS tb_trich_dan,
+                              count(*) FILTER (WHERE danh_gia = 1) AS huu_ich,
+                              count(*) FILTER (WHERE danh_gia = -1) AS chua_dung
+                       FROM hoi_dap_log GROUP BY 1 ORDER BY 2 DESC""")
+        theo_he_thong = _rows(cur)
         cur.execute("""SELECT d AS ma, count(*) AS n FROM hoi_dap_log, unnest(trich_dan) AS d
                        GROUP BY d ORDER BY n DESC, d LIMIT 10""")
         hay_trich_dan = _rows(cur)
     return {"tong": tong, "theo_ngay": theo_ngay, "bi_danh_gia_sai": bi_danh_gia_sai,
-            "gan_day": gan_day, "hay_trich_dan": hay_trich_dan}
+            "gan_day": gan_day, "hay_trich_dan": hay_trich_dan, "theo_he_thong": theo_he_thong}

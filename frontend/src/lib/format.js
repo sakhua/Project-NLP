@@ -59,11 +59,18 @@ export const EDGE_LABEL = {
   BO_SUNG: "Bổ sung",
   THAY_THE: "Thay thế",
   BAI_BO: "Bãi bỏ",
+  LIEN_QUAN: "Liên quan",
+  XUAT_HIEN_TAI: "Xuất hiện tại",
 };
 
 export const VERSION_LABEL = { goc: "Bản gốc", sua_doi: "Sửa đổi", bo_sung: "Bổ sung", thay_the: "Thay thế" };
 
-export const ROLE_LABEL = { seed: "Tìm trực tiếp", graph: "Từ đồ thị", path: "Trung gian" };
+export const ROLE_LABEL = { seed: "Tìm trực tiếp", graph: "Từ đồ thị", path: "Trung gian", entity: "Qua thực thể" };
+
+export const ENTITY_TYPE = {
+  HANH_VI: "Hành vi", PHUONG_TIEN: "Phương tiện", CHU_THE: "Chủ thể", CHE_TAI: "Chế tài", DIEU_KIEN: "Điều kiện",
+  GIAY_TO: "Giấy tờ", CO_QUAN: "Cơ quan", KHAI_NIEM: "Khái niệm",
+};
 
 /** Mã điều khoản trong ngoặc vuông của câu trả lời: [ND168_2024.D6.K9.b] */
 export const CITE_RE = /\[([A-Z]+\d+_\d{4}(?:\.[A-Za-z]?\d+[a-z]?|\.[a-zđ]\d?)*)\]/g;

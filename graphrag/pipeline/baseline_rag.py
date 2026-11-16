@@ -1,25 +1,33 @@
-"""Ba hệ thống đối chứng, chạy hoàn toàn trên PostgreSQL. Phụ trách: TV3.
+"""B1 – Hybrid RAG: hệ thống đối chứng chỉ có bước truy hồi đầu của hệ thống đề xuất.
 
-B1: BM25        B2: vector (pgvector)        B3: BM25 + vector, gộp RRF, rerank
-Mọi hàm nhận `res` (graphrag.resources.Resources) để dùng chung kết nối và mô hình.
+BM25 (+ mở rộng truy vấn) và vector (pgvector) → gộp RRF → lọc theo ngày áp dụng → rerank → top_k_final
+→ cùng prompt và cách trích dẫn với hệ thống đề xuất. KHÔNG mở rộng đồ thị.
+
+Dùng lại đúng mã của graph_rag.run với hops = 0, nên khác biệt giữa B1 và hệ thống đề xuất chỉ là bước
+mở rộng trên đồ thị (so sánh công bằng, cũng chính là thí nghiệm ablation "bỏ đồ thị").
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import date
 
+from graphrag.pipeline import graph_rag
 
-def retrieve_b1(res, question: str, k: int) -> list[str]:
-    raise NotImplementedError  # TODO(TV3): res.bm25.search
-
-
-def retrieve_b2(res, question: str, k: int) -> list[str]:
-    raise NotImplementedError  # TODO(TV3): res.embedder.encode_queries + postgres.vector_search
+STEPS = {k: v for k, v in graph_rag.STEPS.items() if k != "graph"}
 
 
-def retrieve_b3(res, question: str, k: int) -> list[str]:
-    raise NotImplementedError  # TODO(TV3): fusion.rrf([b1, b2]) + rerank (nếu bật)
+def run(res, question: str, ngay: date | None = None, history: list[dict] | None = None,
+        use_temporal_filter: bool = True, stream: bool = False, **_) -> Iterator[dict]:
+    """Phát sự kiện cùng dạng graph_rag.run (step / context / token / done)."""
+    yield from graph_rag.run(res, question, ngay=ngay, history=history, hops=0,
+                             use_temporal_filter=use_temporal_filter, stream=stream)
 
 
-def answer(res, question: str, system: str = "B3", ngay: date | None = None) -> dict:
+def answer(res, question: str, ngay: date | None = None, history: list[dict] | None = None,
+           use_temporal_filter: bool = True, **_) -> dict:
     """Trả về cùng dạng với graph_rag.answer."""
-    raise NotImplementedError
+    out: dict = {}
+    for ev in run(res, question, ngay=ngay, history=history, use_temporal_filter=use_temporal_filter):
+        if ev["type"] == "done":
+            out = {k: v for k, v in ev.items() if k != "type"}
+    return out

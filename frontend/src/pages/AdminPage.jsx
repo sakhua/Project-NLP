@@ -6,6 +6,8 @@ import { CAP_LABEL, EDGE_LABEL, fmtDate, fmtMs, fmtNum, shortLabel } from "../li
 import { navigate } from "../lib/router.js";
 import { EDGE_COLORS } from "../components/ContextGraph.jsx";
 
+const MA_HT = { GRAPH: "Hybrid GraphRAG (đề xuất)", B1: "Hybrid RAG (B1)", B2: "GraphRAG kiểu Microsoft (B2)" };
+
 const PW_KEY = "graphrag.admin";
 
 function Bars({ data, colors, unit }) {
@@ -67,15 +69,30 @@ function Activity({ password, onLogout }) {
           <Bars data={(s.hay_trich_dan || []).map((r) => ({ k: r.ma, label: shortLabel(r.ma), n: r.n }))} />
         </div>
       </div>
+      {(s.theo_he_thong || []).length > 0 && (
+        <div className="box" style={{ marginBottom: 14 }}>
+          <h3>Theo hệ thống</h3>
+          <table className="tbl">
+            <thead><tr><th>Hệ thống</th><th>Số câu</th><th>Thời gian TB</th><th>Trích dẫn TB</th><th>Hữu ích</th><th>Chưa đúng</th></tr></thead>
+            <tbody>
+              {s.theo_he_thong.map((r) => (
+                <tr key={r.he_thong}><td>{MA_HT[r.he_thong] || r.he_thong}</td><td>{fmtNum(r.so_cau)}</td><td>{fmtMs(r.tb_ms)}</td>
+                  <td>{r.tb_trich_dan ?? "–"}</td><td>{r.huu_ich}</td><td>{r.chua_dung}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="box" style={{ marginBottom: 14 }}>
         <h3>Câu hỏi gần đây</h3>
         <table className="tbl">
-          <thead><tr><th>Thời gian</th><th>Câu hỏi</th><th>Ngày áp dụng</th><th>Thời gian trả lời</th><th>Trích dẫn</th><th>Đánh giá</th></tr></thead>
+          <thead><tr><th>Thời gian</th><th>Câu hỏi</th><th>Hệ thống</th><th>Ngày áp dụng</th><th>Thời gian trả lời</th><th>Trích dẫn</th><th>Đánh giá</th></tr></thead>
           <tbody>
             {s.gan_day.map((r) => (
               <tr key={r.id}>
                 <td className="muted">{new Date(r.thoi_gian).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })}</td>
                 <td>{r.cau_hoi}</td>
+                <td className="muted nowrap">{r.he_thong || "GRAPH"}</td>
                 <td>{fmtDate(r.ngay_ap_dung)}</td>
                 <td>{fmtMs(r.latency_ms)}</td>
                 <td>{r.so_trich_dan ?? 0}</td>
@@ -125,6 +142,8 @@ export default function AdminPage() {
               <div className="kpi"><div className="v">{fmtNum(g?.tong_node)}</div><div className="l">Node đồ thị (Neo4j)</div></div>
               <div className="kpi"><div className="v">{fmtNum(g?.tong_canh)}</div><div className="l">Cạnh đồ thị</div></div>
               <div className="kpi"><div className="v">{fmtNum(ov.so_cau_hoi)}</div><div className="l">Câu hỏi đã trả lời</div></div>
+              <div className="kpi"><div className="v">{ov.ms_graphrag?.ms_thuc_the ? fmtNum(ov.ms_graphrag.ms_thuc_the) : "–"}</div><div className="l">Thực thể (GraphRAG kiểu Microsoft)</div>
+                <div className="s">{ov.ms_graphrag?.ms_thuc_the ? `${fmtNum(ov.ms_graphrag.ms_quan_he)} quan hệ · ${fmtNum(ov.ms_graphrag.ms_cong_dong)} cộng đồng` : "chưa dựng chỉ mục (scripts/05)"}</div></div>
               <div className="kpi"><div className="v" style={{ fontSize: 15, paddingTop: 8 }}>{ov.mo_hinh.llm}</div><div className="l">Mô hình sinh câu trả lời</div><div className="s">rerank: {ov.mo_hinh.reranker || "tắt"}</div></div>
             </div>
             <div className="grid-2">

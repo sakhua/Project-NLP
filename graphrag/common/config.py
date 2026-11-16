@@ -65,6 +65,7 @@ def load_config(env: str | None = None) -> dict[str, Any]:
     }
     cfg["secrets"] = {
         "openrouter_api_key": os.getenv("OPENROUTER_API_KEY", ""),
+        "openai_api_key": os.getenv("OPENAI_API_KEY", ""),   # dự phòng cho chat khi khóa OpenRouter hết hạn mức
         "admin_password": os.getenv("ADMIN_PASSWORD", ""),
     }
     cfg["env"] = env

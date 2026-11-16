@@ -28,6 +28,7 @@ api   = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]                       # ba
 ml    = ["sentence-transformers>=3.0"]                                       # bge-m3, reranker chạy trên máy (tùy chọn)
 parse = ["python-docx>=1.1", "regex>=2024.0"]                                # đọc .docx
 eval  = ["ranx>=0.3.19", "scikit-learn>=1.4", "statsmodels>=0.14", "pandas>=2.2"]
+msgraph = ["networkx>=3.2", "python-igraph>=0.11", "leidenalg>=0.10"]   # baseline GraphRAG kiểu Microsoft (Leiden)
 demo  = ["streamlit>=1.36"]                                                  # scripts/streamlit_demo.py
 # RAGAS: scripts/chay_bo_test.py --ragas. Ghim phiên bản để pip không mất nhiều phút dò phụ thuộc langchain
 ragas = ["ragas==0.4.3", "langchain-openai==1.7.3", "langchain-community==0.3.31"]

@@ -1,47 +1,40 @@
-"""Chạy một bộ câu hỏi qua pipeline GraphRAG thật và chấm tự động.
+"""Chạy bộ câu hỏi qua các hệ thống và chấm bằng 6 độ đo KHÔNG dùng LLM (graphrag/evaluation/metrics.py).
 
 Cần: Docker đã bật (PostgreSQL + Neo4j đã nạp dữ liệu), OPENROUTER_API_KEY trong .env.
 
-  python scripts/chay_bo_test.py                               # 200 câu trong data/eval/bo_test_tu_dong.jsonl
+  python scripts/chay_bo_test.py                               # hệ thống đề xuất, data/eval/bo_test_tu_dong.jsonl
+  python scripts/chay_bo_test.py --he-thong hybrid_graphrag hybrid_rag ms_graphrag   # so sánh 3 hệ thống
   python scripts/chay_bo_test.py --gioi-han 20                 # chạy thử 20 câu đầu
-  python scripts/chay_bo_test.py --loai hieu_luc so_sanh       # chỉ một vài loại
+  python scripts/chay_bo_test.py --loai hieu_luc so_sanh       # chỉ một vài loại câu
   python scripts/chay_bo_test.py --id t001 t077                # vài câu cụ thể
   python scripts/chay_bo_test.py --file data/eval/questions_TV1.jsonl   # bộ câu do nhóm soạn (cùng định dạng)
   python scripts/chay_bo_test.py --tiep                        # chạy tiếp lần trước bị dừng giữa chừng
-  python scripts/chay_bo_test.py --cham-lai data/eval/ket_qua/ket_qua_20261102_2130.jsonl   # chỉ chấm lại, không gọi API
-  python scripts/chay_bo_test.py --ragas                       # chấm thêm 4 độ đo RAGAS (cần pip install -e ".[ragas]")
-  python scripts/chay_bo_test.py --cham-lai <file kết quả> --ragas   # chấm RAGAS cho lần chạy đã có (không chạy lại GraphRAG)
+  python scripts/chay_bo_test.py --he-thong hybrid_graphrag hybrid_rag ms_graphrag --da-duyet --moi-loai 13   # chạy sơ bộ
+  python scripts/chay_bo_test.py --cham-lai data/eval/ket_qua/ket_qua_<thời điểm>.jsonl   # chấm lại, không gọi API
 
-Kết quả trong data/eval/ket_qua/:
-  ket_qua_<thời điểm>.jsonl   từng câu: câu trả lời, trích dẫn, ngữ cảnh, điểm chấm
-  bao_cao_<thời điểm>.md      báo cáo tổng hợp theo loại câu + danh sách câu sai để đọc lại
-  bao_cao_<thời điểm>.csv     bảng từng câu, mở bằng Excel
+Độ đo (k = 5, 10, 40; 40 là ngân sách ngữ cảnh lớn nhất của hệ thống đề xuất: 10 tìm trực tiếp + 30 mở rộng):
+  Truy hồi – so danh sách điều khoản hệ thống lấy ra (theo thứ tự) với gold_ids:
+    Recall@k        tỉ lệ điều khoản gold nằm trong top-k
+    Full Recall@k   1 nếu lấy được TẤT CẢ điều khoản gold trong top-k (quan trọng với câu multi-hop)
+    MRR@k           1 / thứ hạng của điều khoản gold đầu tiên
+    F2@k            trung bình điều hòa nghiêng về recall của precision@k và recall@k
+  Câu trả lời – so khớp dữ kiện kiểm chứng được (mức tiền, số điểm trừ, mã điều khoản trích dẫn):
+    Faithfulness      tỉ lệ dữ kiện trong câu trả lời có căn cứ trong ngữ cảnh đã đưa cho LLM (mã trích dẫn phải nằm
+                      trong ngữ cảnh). Câu trả lời không nêu dữ kiện nào thì không chấm.
+    Answer Relevance  F1 giữa dữ kiện của câu trả lời và của đáp án chuẩn; câu đáp án "chưa/không bị xử phạt" thì
+                      1 nếu câu trả lời nói rõ là chưa/không áp dụng.
+Ý nghĩa thống kê: paired bootstrap (10.000 lần) cho chênh lệch trung bình giữa hệ thống đề xuất và từng baseline.
 
-Cách chấm (tự động, nên chỉ là ước lượng):
-  - Tiền đúng   : mọi số tiền trong so_tien đều xuất hiện trong câu trả lời (hiểu cả "18.000.000" và "18 triệu").
-                  Câu có so_tien rỗng (vd. "chưa bị xử phạt"): đúng nếu không nêu mức tiền nào trong
-                  so_tien_khong_duoc_co (mức của phiên bản khác ngày).
-  - Điểm đúng   : câu có diem_tru thì câu trả lời phải nêu "N điểm".
-  - Đúng        : tiền đúng và (nếu có) điểm đúng.
-  - Ngữ cảnh đủ : mọi mã gold đều nằm trong ngữ cảnh đưa cho LLM (đo phần truy hồi + đồ thị).
-  - Trích dẫn   : recall = tỉ lệ gold được trích; precision = tỉ lệ trích dẫn trúng gold
-                  (tính cả khi trích khoản cha/điểm con của gold).
-  - RAGAS (--ragas): Faithfulness, Answer Relevance, Context Precision, Context Recall do LLM giám khảo chấm
-                  (evaluation.judge_model, mặc định openai/gpt-4o; đổi bằng --ragas-model), cộng Context
-                  Precision/Recall (ID) tính theo mã gold, không dùng LLM. Xem graphrag/evaluation/ragas_eval.py.
-Chi phí: mỗi câu 1–2 lượt gpt-4o-mini + 1 embedding + 1 rerank; --ragas thêm khoảng 6–10 lượt gọi mô hình giám khảo
-mỗi câu (đắt hơn nhiều). Chạy thử --gioi-han 20 rồi xem số dư trên openrouter.ai để ước lượng trước khi chạy cả bộ.
+Kết quả trong data/eval/ket_qua/: ket_qua_*.jsonl (từng câu), bao_cao_*.md (báo cáo), bao_cao_*.csv (mở bằng Excel).
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
-import re
 import sys
 import threading
 import time
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
@@ -51,6 +44,23 @@ sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+from graphrag.evaluation.metrics import (answer_relevance_khong_llm, f2_at_k, faithfulness_khong_llm,  # noqa: E402
+                                         full_recall_at_k, mrr_at_k, recall_at_k, so_tien_trong)
+
+KS = (5, 10, 40)
+TEN_LOAI = {"don": "Đơn", "multi_hop": "Multi-hop", "hieu_luc": "Hiệu lực", "so_sanh": "So sánh"}
+TEN_HT = {"hybrid_graphrag": "Hybrid GraphRAG (đề xuất)", "hybrid_rag": "Hybrid RAG (B1)",
+          "ms_graphrag": "GraphRAG kiểu Microsoft (B2)"}
+NHAN_HT = {"hybrid_graphrag": "Đề xuất", "hybrid_rag": "B1", "ms_graphrag": "B2"}
+# Cột hiển thị: (khóa, tên)
+COT = ([(f"recall@{k}", f"Recall@{k}") for k in KS] + [(f"full_recall@{k}", f"Full Recall@{k}") for k in KS]
+       + [(f"mrr@{k}", f"MRR@{k}") for k in (10,)] + [(f"f2@{k}", f"F2@{k}") for k in KS]
+       + [("faithfulness", "Faithfulness"), ("answer_relevance", "Answer Relevance")])
+COT_GON = ["recall@10", "full_recall@10", "full_recall@40", "mrr@10", "f2@10", "faithfulness", "answer_relevance"]
+
+__all__ = ["cham", "so_tien_trong", "bootstrap"]
+
+
 def rel(p: Path) -> str:
     try:
         return str(p.resolve().relative_to(ROOT))
@@ -58,266 +68,190 @@ def rel(p: Path) -> str:
         return str(p)
 
 
-RAGAS_COT = ["faithfulness", "answer_relevancy", "llm_context_precision_with_reference", "context_recall",
-             "id_based_context_precision", "id_based_context_recall"]
-TEN_LOAI = {"don": "Đơn", "multi_hop": "Multi-hop", "hieu_luc": "Hiệu lực", "so_sanh": "So sánh"}
+def ht_cua(r: dict) -> str:
+    return r.get("he_thong") or "hybrid_graphrag"
 
 
-# ---------------------------------------------------------------- chấm điểm
+# ---------------------------------------------------------------- chấm một câu
 
-def so_tien_trong(text: str) -> set[int]:
-    """Mọi mức tiền nêu trong câu trả lời: '18.000.000', '18 triệu', 'từ 18 đến 20 triệu', '500 nghìn'."""
-    t = text.replace("\u00a0", " ")
-    out = {int(x.replace(".", "").replace(",", "")) for x in re.findall(r"\d{1,3}(?:[.,]\d{3})+(?![.,]?\d)", t)}
-
-    def num(s: str) -> float:
-        return float(s.replace(",", "."))
-
-    for a, b, dv in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:đến|–|-|tới)\s*(\d+(?:[.,]\d+)?)\s*(triệu|nghìn|ngàn)", t):
-        k = 1_000_000 if dv == "triệu" else 1_000
-        out |= {round(num(a) * k), round(num(b) * k)}
-    for a, dv in re.findall(r"(\d+(?:[.,]\d+)?)\s*(triệu|nghìn|ngàn)", t):
-        out.add(round(num(a) * (1_000_000 if dv == "triệu" else 1_000)))
+def cham(q: dict, r: dict) -> dict:
+    """q: câu hỏi (gold_ids, so_tien, diem_tru, dap_an). r: kết quả đã lưu (truy_hoi, tra_loi, ngu_canh_text,
+    trich_dan, trich_dan_la). Trả về các độ đo của câu."""
+    gold = q.get("gold_ids") or []
+    ds = r.get("truy_hoi") or r.get("ngu_canh") or []
+    out = {}
+    for k in KS:
+        out[f"recall@{k}"] = recall_at_k(gold, ds, k)
+        out[f"full_recall@{k}"] = full_recall_at_k(gold, ds, k)
+        out[f"mrr@{k}"] = mrr_at_k(gold, ds, k)
+        out[f"f2@{k}"] = f2_at_k(gold, ds, k)
+    out["faithfulness"] = faithfulness_khong_llm(r.get("tra_loi") or "", r.get("ngu_canh_text") or [],
+                                                 r.get("trich_dan") or [], r.get("trich_dan_la") or [])
+    out["answer_relevance"] = answer_relevance_khong_llm(r.get("tra_loi") or "", q.get("so_tien") or [],
+                                                         q.get("dap_an") or "", q.get("diem_tru"))
+    out["gold_thieu"] = [g for g in gold if g not in set(ds)]
     return out
 
 
-def _lien_quan(cite: str, gold: list[str]) -> bool:
-    return any(cite == g or g.startswith(cite + ".") or cite.startswith(g + ".") for g in gold)
+# ---------------------------------------------------------------- tổng hợp, thống kê
+
+def tb(rows: list[dict], key: str) -> float | None:
+    v = [r["cham"][key] for r in rows if r["cham"].get(key) is not None]
+    return sum(v) / len(v) if v else None
 
 
-def cham(q: dict, out: dict) -> dict:
-    ans = out.get("answer") or ""
-    gold = q.get("gold_ids") or []
-    ctx = {u["id"] for u in out.get("units", [])}
-    cited = out.get("citations") or []
-    tien = so_tien_trong(ans)
-    if q.get("so_tien"):
-        thieu_tien = [x for x in q["so_tien"] if x not in tien]
-        tien_dung = not thieu_tien
-    else:
-        cam = q.get("so_tien_khong_duoc_co") or []
-        thieu_tien = [x for x in cam if x in tien]          # ở đây: mức tiền KHÔNG được nêu mà vẫn nêu
-        tien_dung = not thieu_tien
-    diem_dung = None
-    if q.get("diem_tru"):
-        n = q["diem_tru"]
-        diem_dung = bool(re.search(rf"(?<!\d)0?{n}\s*điểm", ans))
-    ctx_hit = [g for g in gold if g in ctx]
-    cite_hit = [g for g in gold if g in cited]
-    cite_ok = [c for c in cited if _lien_quan(c, gold + (q.get("nguon_sua_doi") or []))]
-    return {
-        "dung": tien_dung and diem_dung is not False,
-        "tien_dung": tien_dung, "diem_dung": diem_dung,
-        "tien_lech": thieu_tien,
-        "ngu_canh_du": len(ctx_hit) == len(gold), "ngu_canh_recall": len(ctx_hit) / len(gold) if gold else 1.0,
-        "gold_thieu_ngu_canh": [g for g in gold if g not in ctx],
-        "trich_dan_recall": len(cite_hit) / len(gold) if gold else 1.0,
-        "trich_dan_precision": len(cite_ok) / len(cited) if cited else 0.0,
-        "so_trich_dan": len(cited),
-    }
+def fmt(x: float | None) -> str:
+    return "–" if x is None else f"{x:.3f}"
 
 
-# ---------------------------------------------------------------- báo cáo
+def bootstrap(a: list[float], b: list[float], lan: int = 10000, seed: int = 42) -> tuple[float, float]:
+    """Paired bootstrap: (chênh lệch trung bình a − b, p-value hai phía)."""
+    n = len(a)
+    if n == 0:
+        return 0.0, 1.0
+    d = [x - y for x, y in zip(a, b)]
+    goc = sum(d) / n
+    if all(x == 0 for x in d):
+        return 0.0, 1.0
+    import numpy as np
 
-def pct(xs: list[bool]) -> str:
-    return f"{100 * sum(xs) / len(xs):.0f}%" if xs else "–"
+    rng = np.random.default_rng(seed)
+    m = np.asarray(d)[rng.integers(0, n, size=(lan, n))].mean(axis=1)
+    lech = int((m <= 0).sum()) if goc >= 0 else int((m >= 0).sum())
+    return goc, min(1.0, 2 * lech / lan)
 
 
-def tb(xs: list[float]) -> str:
-    return f"{sum(xs) / len(xs):.2f}" if xs else "–"
+def bang_theo_loai(rows: list[dict]) -> list[str]:
+    ok = [r for r in rows if not r.get("loi")]
+    md = ["| Loại | Số câu | " + " | ".join(t for _, t in COT) + " |", "|---|---|" + "---|" * len(COT)]
+    for k, ten in list(TEN_LOAI.items()) + [("*", "**Tổng**")]:
+        rs = ok if k == "*" else [r for r in ok if r["loai"] == k]
+        if rs:
+            md.append(f"| {ten} | {len(rs)} | " + " | ".join(fmt(tb(rs, c)) for c, _ in COT) + " |")
+    return md
 
 
 def bao_cao(rows: list[dict], nguon: str, stamp: str, out_dir: Path) -> tuple[Path, Path]:
+    he = [h for h in TEN_HT if any(ht_cua(r) == h for r in rows)]
     ok = [r for r in rows if not r.get("loi")]
-    loi = [r for r in rows if r.get("loi")]
-    nhom = defaultdict(list)
-    for r in ok:
-        nhom[r["loai"]].append(r)
-
-    def dong(ten: str, rs: list[dict]) -> str:
-        c = [r["cham"] for r in rs]
-        diem = [x["diem_dung"] for x in c if x["diem_dung"] is not None]
-        return (f"| {ten} | {len(rs)} | **{pct([x['dung'] for x in c])}** | {pct([x['tien_dung'] for x in c])} | "
-                f"{pct(diem)} | {pct([x['ngu_canh_du'] for x in c])} | {tb([x['ngu_canh_recall'] for x in c])} | "
-                f"{tb([x['trich_dan_recall'] for x in c])} | {tb([x['trich_dan_precision'] for x in c])} | "
-                f"{tb([r['thoi_gian_s'] for r in rs])} |")
-
     md = [f"# Kết quả chạy bộ test — {time.strftime('%d/%m/%Y %H:%M')}", "",
-          f"Bộ câu hỏi: `{nguon}` · {len(rows)} câu · {len(loi)} câu lỗi khi chạy", "",
-          "| Loại | Số câu | Đúng | Tiền đúng | Điểm trừ đúng | Ngữ cảnh đủ gold | Recall ngữ cảnh | "
-          "Recall trích dẫn | Precision trích dẫn | Thời gian TB (s) |",
-          "|---|---|---|---|---|---|---|---|---|---|"]
-    for k in TEN_LOAI:
-        if nhom.get(k):
-            md.append(dong(TEN_LOAI[k], nhom[k]))
-    md.append(dong("**Tổng**", ok))
-    # cặp hiệu lực: cả hai ngày đều đúng
-    by_id = {r["id"]: r for r in ok}
-    cap = {tuple(sorted((r["id"], r["cap_voi"]))) for r in ok if r.get("cap_voi") in by_id}
-    if cap:
-        dung_ca_cap = sum(by_id[a]["cham"]["dung"] and by_id[b]["cham"]["dung"] for a, b in cap)
-        md += ["", f"Cặp câu hiệu lực (cùng câu hỏi, khác ngày) đúng cả hai: **{dung_ca_cap}/{len(cap)}**."]
-    co_ragas = [r for r in ok if r.get("ragas")]
-    if co_ragas:
-        from graphrag.evaluation.ragas_eval import COT
-        cot = [c for c in COT if any(r["ragas"].get(c) is not None for r in co_ragas)]
-        nhom_r = defaultdict(list)
-        for r in co_ragas:
-            nhom_r[r["loai"]].append(r)
-
-        def tb_r(rs: list[dict], c: str) -> str:
-            v = [r["ragas"][c] for r in rs if r["ragas"].get(c) is not None]
-            return f"{sum(v) / len(v):.2f}" if v else "–"
-
-        md += ["", f"### Độ đo RAGAS ({len(co_ragas)} câu)", "",
-               "| Loại | Số câu | " + " | ".join(COT[c] for c in cot) + " |", "|---|---|" + "---|" * len(cot)]
-        for k in list(TEN_LOAI) + ["*"]:
-            rs = co_ragas if k == "*" else nhom_r.get(k, [])
-            if rs:
-                ten = "**Tổng**" if k == "*" else TEN_LOAI[k]
-                md.append(f"| {ten} | {len(rs)} | " + " | ".join(tb_r(rs, c) for c in cot) + " |")
-        md += ["", "Thang 0–1, càng cao càng tốt; ô \"–\" là giám khảo không trả kết quả hợp lệ. Faithfulness chỉ so câu "
-               "trả lời với ngữ cảnh (không so với đáp án chuẩn), nên đọc cùng cột *Đúng* ở bảng trên. "
-               "Precision (ID) thấp là bình thường vì ngữ cảnh gồm nhiều điều khoản, gold chỉ 1–3 mã."]
-    md += ["", "Cách đọc: *Đúng* = nêu đúng mọi mức tiền (và số điểm trừ nếu có). *Ngữ cảnh đủ gold* = mọi điều khoản "
-           "căn cứ đều được tìm thấy và đưa cho LLM; nếu cột này thấp thì lỗi ở bước tìm kiếm/đồ thị, nếu cột này cao mà "
-           "*Đúng* thấp thì lỗi ở bước sinh câu trả lời. Chấm tự động theo số tiền nên chỉ là ước lượng: "
-           "hãy đọc lại các câu sai bên dưới.", ""]
-
-    sai = [r for r in ok if not r["cham"]["dung"]]
-    md += [f"## Câu sai ({len(sai)})", ""]
-    for r in sai:
-        c = r["cham"]
-        ly_do = []
-        if not c["tien_dung"]:
-            ly_do.append(("nêu mức tiền của phiên bản khác: " if not r["so_tien"] else "thiếu mức tiền: ")
-                         + ", ".join(f"{x:,}".replace(",", ".") for x in c["tien_lech"]))
-        if c["diem_dung"] is False:
-            ly_do.append(f"không nêu đúng {r['diem_tru']} điểm trừ")
-        if c["gold_thieu_ngu_canh"]:
-            ly_do.append("ngữ cảnh thiếu " + ", ".join(c["gold_thieu_ngu_canh"]))
-        md += [f"### {r['id']} · {TEN_LOAI.get(r['loai'], r['loai'])} · ngày {r['ngay_ap_dung']}", "",
-               f"**Hỏi:** {r['cau_hoi']}", "",
-               f"**Đáp án đúng:** {r['dap_an']} _(căn cứ: {r['can_cu']})_", "",
-               "**Hệ thống trả lời:**", "", "> " + (r["tra_loi"] or "").replace("\n", "\n> "), "",
-               f"Lý do: {'; '.join(ly_do) or '–'} · Trích dẫn: {', '.join(r['trich_dan']) or '(không có)'}", ""]
-    if loi:
-        md += [f"## Câu lỗi khi chạy ({len(loi)})", ""] + [f"- {r['id']}: {r['loi']}" for r in loi] + [""]
+          f"Bộ câu hỏi: `{nguon}` · 6 độ đo không dùng LLM (cách tính: đầu file `scripts/chay_bo_test.py`).", ""]
+    if len(he) > 1:
+        ten = dict(COT)
+        md += ["## So sánh các hệ thống (toàn bộ câu)", "",
+               "| Hệ thống | Số câu | " + " | ".join(ten[c] for c in COT_GON) + " |", "|---|---|" + "---|" * len(COT_GON)]
+        for h in he:
+            rs = [r for r in ok if ht_cua(r) == h]
+            md.append(f"| {TEN_HT[h]} | {len(rs)} | " + " | ".join(fmt(tb(rs, c)) for c in COT_GON) + " |")
+        if "hybrid_graphrag" in he:
+            md += ["", "Chênh lệch so với hệ thống đề xuất (đề xuất − baseline; paired bootstrap, chỉ các câu cả hai "
+                   "đều chạy được; * là p < 0,05):", "",
+                   "| Độ đo | " + " | ".join(TEN_HT[h] for h in he if h != "hybrid_graphrag") + " |",
+                   "|---|" + "---|" * (len(he) - 1)]
+            de_xuat = {r["id"]: r["cham"] for r in ok if ht_cua(r) == "hybrid_graphrag"}
+            for c in COT_GON:
+                cells = []
+                for h in he:
+                    if h == "hybrid_graphrag":
+                        continue
+                    kia = {r["id"]: r["cham"] for r in ok if ht_cua(r) == h}
+                    chung = [i for i in sorted(set(de_xuat) & set(kia))
+                             if de_xuat[i].get(c) is not None and kia[i].get(c) is not None]
+                    d, p = bootstrap([de_xuat[i][c] for i in chung], [kia[i][c] for i in chung])
+                    cells.append(f"{d:+.3f} (p={p:.3f}){'*' if p < 0.05 else ''}")
+                md.append(f"| {ten[c]} | " + " | ".join(cells) + " |")
+        md.append("")
+    for h in he:
+        rs = [r for r in rows if ht_cua(r) == h]
+        loi = [r for r in rs if r.get("loi")]
+        md += [f"## {TEN_HT[h]}", "", f"{len(rs)} câu · {len(loi)} câu lỗi khi chạy", ""] + bang_theo_loai(rs) + [""]
+        xem = [r for r in rs if not r.get("loi") and (r["cham"]["answer_relevance"] < 1
+                                                      or (r["cham"]["faithfulness"] or 1) < 1)]
+        md += [f"### Câu cần xem lại ({len(xem)}): Answer Relevance hoặc Faithfulness dưới 1", ""]
+        for r in xem:
+            c = r["cham"]
+            ly_do = [f"Answer Relevance {c['answer_relevance']:.2f}"]
+            if c["faithfulness"] is not None and c["faithfulness"] < 1:
+                ly_do.append(f"Faithfulness {c['faithfulness']:.2f}")
+            if c["gold_thieu"]:
+                ly_do.append("không lấy được " + ", ".join(c["gold_thieu"]))
+            md += [f"#### {r['id']} · {TEN_LOAI.get(r['loai'], r['loai'])} · ngày {r['ngay_ap_dung']}", "",
+                   f"**Hỏi:** {r['cau_hoi']}", "", f"**Đáp án chuẩn:** {r['dap_an']} _(căn cứ: {r['can_cu']})_", "",
+                   "**Hệ thống trả lời:**", "", "> " + (r.get("tra_loi") or "").replace("\n", "\n> "), "",
+                   f"{'; '.join(ly_do)} · Trích dẫn: {', '.join(r.get('trich_dan') or []) or '(không có)'}", ""]
+        if loi:
+            md += [f"### Câu lỗi khi chạy ({len(loi)})", ""] + [f"- {r['id']}: {r['loi']}" for r in loi] + [""]
 
     p_md = out_dir / f"bao_cao_{stamp}.md"
     p_md.write_text("\n".join(md), encoding="utf-8")
     p_csv = out_dir / f"bao_cao_{stamp}.csv"
     with open(p_csv, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["id", "loai", "ngay_ap_dung", "cau_hoi", "dap_an", "tra_loi", "dung", "tien_dung", "diem_dung",
-                    "ngu_canh_du", "ngu_canh_recall", "trich_dan_recall", "trich_dan_precision", "gold_ids",
-                    "trich_dan", "thoi_gian_s", "loi"] + [f"ragas_{c}" for c in RAGAS_COT])
+        w.writerow(["he_thong", "id", "loai", "ngay_ap_dung", "cau_hoi", "dap_an", "tra_loi"] + [c for c, _ in COT]
+                   + ["gold_ids", "truy_hoi", "trich_dan", "thoi_gian_s", "loi"])
         for r in rows:
             c = r.get("cham") or {}
-            w.writerow([r["id"], r["loai"], r["ngay_ap_dung"], r["cau_hoi"], r["dap_an"], r.get("tra_loi", ""),
-                        c.get("dung"), c.get("tien_dung"), c.get("diem_dung"), c.get("ngu_canh_du"),
-                        round(c.get("ngu_canh_recall", 0), 2), round(c.get("trich_dan_recall", 0), 2),
-                        round(c.get("trich_dan_precision", 0), 2), " ".join(r["gold_ids"]),
-                        " ".join(r.get("trich_dan", [])), r.get("thoi_gian_s", ""), r.get("loi", "")]
-                       + [(r.get("ragas") or {}).get(c) for c in RAGAS_COT])
+            w.writerow([ht_cua(r), r["id"], r["loai"], r["ngay_ap_dung"], r["cau_hoi"], r["dap_an"], r.get("tra_loi", "")]
+                       + [None if c.get(k) is None else round(c[k], 4) for k, _ in COT]
+                       + [" ".join(r["gold_ids"]), " ".join(r.get("truy_hoi") or []), " ".join(r.get("trich_dan") or []),
+                          r.get("thoi_gian_s", ""), r.get("loi", "")])
     return p_md, p_csv
 
 
 def tom_tat_man_hinh(rows: list[dict]) -> None:
-    ok = [r for r in rows if not r.get("loi")]
-    print(f"\n{'Loại':<11}{'Số câu':>7}{'Đúng':>7}{'Tiền':>7}{'Điểm':>7}{'Ng.cảnh':>9}")
-    nhom = defaultdict(list)
-    for r in ok:
-        nhom[r["loai"]].append(r["cham"])
-    for k, ten in list(TEN_LOAI.items()) + [("*", "Tổng")]:
-        c = [x for v in nhom.values() for x in v] if k == "*" else nhom.get(k, [])
-        if not c:
-            continue
-        diem = [x["diem_dung"] for x in c if x["diem_dung"] is not None]
-        print(f"{ten:<11}{len(c):>7}{pct([x['dung'] for x in c]):>7}{pct([x['tien_dung'] for x in c]):>7}"
-              f"{pct(diem):>7}{pct([x['ngu_canh_du'] for x in c]):>9}")
-    if len(ok) < len(rows):
-        print(f"{len(rows) - len(ok)} câu lỗi khi chạy (xem báo cáo).")
-    co = [r["ragas"] for r in ok if r.get("ragas")]
-    if co:
-        ten = {"faithfulness": "Faithfulness", "answer_relevancy": "Answer Relevance",
-               "llm_context_precision_with_reference": "Context Precision", "context_recall": "Context Recall",
-               "id_based_context_precision": "Context Precision (ID)", "id_based_context_recall": "Context Recall (ID)"}
-        print(f"\nRAGAS ({len(co)} câu, trung bình 0–1):")
-        for c in RAGAS_COT:
-            v = [x[c] for x in co if x.get(c) is not None]
-            if v:
-                print(f"  {ten[c]:<24}{sum(v) / len(v):.3f}   ({len(v)} câu có điểm)")
+    ten = dict(COT)
+    print("\n" + f"{'Hệ thống':<10}{'Số câu':>7}" + "".join(f"{ten[c]:>18}" for c in COT_GON))
+    for h in TEN_HT:
+        rs = [r for r in rows if ht_cua(r) == h and not r.get("loi")]
+        if rs:
+            print(f"{NHAN_HT[h]:<10}{len(rs):>7}" + "".join(f"{fmt(tb(rs, c)):>18}" for c in COT_GON))
+    n_loi = sum(1 for r in rows if r.get("loi"))
+    if n_loi:
+        print(f"{n_loi} lượt lỗi khi chạy (xem báo cáo).")
 
 
 # ---------------------------------------------------------------- chạy
 
-def chay_ragas(rows: list[dict], cfg: dict, args, p_out: Path) -> None:
-    """Gắn điểm RAGAS vào từng dòng (r["ragas"]) rồi ghi lại file kết quả."""
-    try:
-        from graphrag.evaluation.ragas_eval import cham_ragas
-        import ragas  # noqa: F401
-    except ImportError as e:
-        print(f"\nChưa cài RAGAS ({e.name}). Chạy: pip install -e \".[ragas]\" rồi chấm lại bằng:\n"
-              f"  python scripts/chay_bo_test.py --cham-lai {rel(p_out)} --ragas")
-        return
-    can = [r for r in rows if not r.get("loi") and (args.ragas_lai or not r.get("ragas"))]
-    thieu = [r for r in can if not r.get("ngu_canh_text")]
-    if thieu:
-        print(f"{len(thieu)} câu không có nội dung ngữ cảnh (kết quả cũ) nên bỏ qua RAGAS; chạy lại các câu đó để chấm.")
-        can = [r for r in can if r.get("ngu_canh_text")]
-    if not can:
-        print("Không có câu nào cần chấm RAGAS.")
-        return
-    model = args.ragas_model or cfg.get("evaluation", {}).get("judge_model", "openai/gpt-4o")
-    print(f"\nChấm RAGAS {len(can)} câu, giám khảo {model}…")
-    diem = cham_ragas(can, cfg, model=model, song_song=max(1, args.song_song))
-    for r, d in zip(can, diem):
-        r["ragas"] = d
-    p_out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in sorted(rows, key=lambda r: r["id"])),
-                     encoding="utf-8")
-
-
-def doc_cau_hoi(path: Path) -> list[dict]:
+def doc_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in open(path, encoding="utf-8-sig") if line.strip()]
+
+
+def ghi_jsonl(path: Path, rows: list[dict]) -> None:
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
+                            for r in sorted(rows, key=lambda r: (r["id"], ht_cua(r)))), encoding="utf-8")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file", default="data/eval/bo_test_tu_dong.jsonl")
+    ap.add_argument("--he-thong", nargs="+", default=["hybrid_graphrag"], choices=list(TEN_HT),
+                    help="hệ thống cần chạy; nhiều hệ thống thì báo cáo có bảng so sánh và kiểm định")
     ap.add_argument("--loai", nargs="*", choices=list(TEN_LOAI))
     ap.add_argument("--id", nargs="*")
     ap.add_argument("--gioi-han", type=int, help="chỉ chạy N câu đầu (sau khi lọc)")
-    ap.add_argument("--song-song", type=int, default=3, help="số câu chạy cùng lúc (mặc định 3)")
+    ap.add_argument("--da-duyet", action="store_true", help="chỉ chạy câu đã rà soát xong (trang_thai = dat hoặc da_sua)")
+    ap.add_argument("--moi-loai", type=int, metavar="N", help="lấy tối đa N câu mỗi loại (chạy sơ bộ cân bằng)")
+    ap.add_argument("--song-song", type=int, default=3, help="số lượt chạy cùng lúc (mặc định 3)")
     ap.add_argument("--ra", default="data/eval/ket_qua", help="thư mục ghi kết quả")
-    ap.add_argument("--tiep", action="store_true", help="chạy tiếp file kết quả gần nhất, bỏ qua câu đã có")
+    ap.add_argument("--tiep", action="store_true", help="chạy tiếp file kết quả gần nhất, bỏ qua lượt đã có")
     ap.add_argument("--cham-lai", metavar="KET_QUA_JSONL", help="chấm lại một file kết quả, không gọi API")
-    ap.add_argument("--ragas", action="store_true", help="chấm thêm Faithfulness, Answer Relevance, "
-                    "Context Precision, Context Recall bằng RAGAS (gọi LLM giám khảo, tốn thêm chi phí)")
-    ap.add_argument("--ragas-model", help="mô hình giám khảo trên OpenRouter (mặc định evaluation.judge_model)")
-    ap.add_argument("--ragas-lai", action="store_true", help="chấm RAGAS lại cả những câu đã có điểm RAGAS")
     args = ap.parse_args()
 
-    src = ROOT / args.file
     out_dir = ROOT / args.ra
     out_dir.mkdir(parents=True, exist_ok=True)
-    qs = doc_cau_hoi(src)
+    qs = doc_jsonl(ROOT / args.file)
     by_id = {q["id"]: q for q in qs}
 
     if args.cham_lai:
         p = Path(args.cham_lai)
-        rows = [json.loads(line) for line in open(p, encoding="utf-8") if line.strip()]
+        rows = doc_jsonl(p)
         for r in rows:
             if not r.get("loi") and r["id"] in by_id:
-                q = {**by_id[r["id"]]}
+                q = by_id[r["id"]]
                 r.update({k: q[k] for k in ("so_tien", "diem_tru", "gold_ids", "dap_an", "can_cu") if k in q})
-                r["cham"] = cham(q, {"answer": r["tra_loi"], "citations": r["trich_dan"],
-                                     "units": [{"id": i} for i in r["ngu_canh"]]})
-        stamp = p.stem.replace("ket_qua_", "")
-        if args.ragas:
-            from graphrag.common.config import load_config
-            chay_ragas(rows, load_config(), args, p)
-        p_md, p_csv = bao_cao(rows, args.file, stamp, out_dir)
+                r["cham"] = cham(q, r)
+        ghi_jsonl(p, rows)
+        p_md, p_csv = bao_cao(rows, args.file, p.stem.replace("ket_qua_", ""), out_dir)
         tom_tat_man_hinh(rows)
         print(f"\nBáo cáo: {rel(p_md)}\nBảng Excel: {rel(p_csv)}")
         return
@@ -330,6 +264,18 @@ def main() -> None:
         qs = [q for q in qs if q["loai"] in args.loai]
     if args.id:
         qs = [q for q in qs if q["id"] in set(args.id)]
+    if args.da_duyet:
+        qs = [q for q in qs if q.get("trang_thai") in ("dat", "da_sua")]
+        print(f"Câu đã rà soát xong: {len(qs)}")
+    if args.moi_loai:
+        dem: dict[str, int] = {}
+        chon = []
+        for q in qs:
+            if dem.get(q["loai"], 0) < args.moi_loai:
+                dem[q["loai"]] = dem.get(q["loai"], 0) + 1
+                chon.append(q)
+        qs = chon
+        print("Số câu theo loại: " + ", ".join(f"{k} {v}" for k, v in dem.items()))
     if args.gioi_han:
         qs = qs[:args.gioi_han]
 
@@ -339,20 +285,20 @@ def main() -> None:
         if not cu:
             sys.exit("Chưa có file kết quả nào để chạy tiếp.")
         p_out = cu[-1]
-        rows = [r for r in (json.loads(line) for line in open(p_out, encoding="utf-8") if line.strip())
-                if not r.get("loi")]
-        xong = {r["id"] for r in rows}
-        p_out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
-        qs = [q for q in qs if q["id"] not in xong]
+        rows = [r for r in doc_jsonl(p_out) if not r.get("loi")]
+        ghi_jsonl(p_out, rows)
+        xong = {(r["id"], ht_cua(r)) for r in rows}
         stamp = p_out.stem.replace("ket_qua_", "")
-        print(f"Chạy tiếp {p_out.name}: đã có {len(xong)} câu, còn {len(qs)} câu.")
+        print(f"Chạy tiếp {p_out.name}: đã có {len(xong)} lượt.")
     else:
+        xong = set()
         stamp = time.strftime("%Y%m%d_%H%M")
         p_out = out_dir / f"ket_qua_{stamp}.jsonl"
         p_out.write_text("", encoding="utf-8")
+    viec = [(q, h) for h in args.he_thong for q in qs if (q["id"], h) not in xong]
 
     from graphrag.common.config import load_config
-    from graphrag.pipeline import graph_rag
+    from graphrag.pipeline import he_thong as ht
     from graphrag.resources import Resources
 
     res = Resources(load_config())
@@ -367,17 +313,19 @@ def main() -> None:
     _ = (res.embedder, res.llm, res.bm25)        # tạo trước, tránh các luồng cùng tạo
 
     lock = threading.Lock()
-    n, t_all = len(qs), time.perf_counter()
-    print(f"Chạy {n} câu, {args.song_song} câu cùng lúc. Kết quả ghi dần vào {rel(p_out)} "
-          f"(Ctrl+C để dừng, chạy lại với --tiep để tiếp tục).\n")
+    n, t_all = len(viec), time.perf_counter()
+    print(f"Chạy {n} lượt ({len(args.he_thong)} hệ thống), {args.song_song} lượt cùng lúc. Kết quả ghi dần vào "
+          f"{rel(p_out)} (Ctrl+C để dừng, chạy lại với --tiep để tiếp tục).\n")
 
-    def mot_cau(q: dict) -> dict:
+    def mot_luot(v: tuple[dict, str]) -> dict:
+        q, h = v
         r = {k: q.get(k) for k in ("id", "loai", "ngay_ap_dung", "cau_hoi", "dap_an", "so_tien", "diem_tru",
                                    "gold_ids", "can_cu", "cap_voi")}
+        r["he_thong"] = h
         t0 = time.perf_counter()
         for lan in range(2):
             try:
-                out = graph_rag.answer(res, q["cau_hoi"], ngay=date.fromisoformat(q["ngay_ap_dung"]))
+                out = ht.answer(res, q["cau_hoi"], he_thong=h, ngay=date.fromisoformat(q["ngay_ap_dung"]))
                 break
             except Exception as e:  # noqa: BLE001
                 if lan == 1:
@@ -385,17 +333,19 @@ def main() -> None:
                     r["thoi_gian_s"] = round(time.perf_counter() - t0, 1)
                     return r
                 time.sleep(5)
+        units = out.get("units", [])
         r.update({"tra_loi": out.get("answer", ""), "trich_dan": out.get("citations", []),
-                  "ngu_canh": [u["id"] for u in out.get("units", [])],
-                  "ngu_canh_text": [f"{u.get('ngu_canh') or ''}\n{u.get('noi_dung') or ''}".strip()
-                                    for u in out.get("units", [])],
-                  "ngu_canh_tu_do_thi": sum(u.get("origin") == "graph" for u in out.get("units", [])),
-                  "thoi_gian_s": round(time.perf_counter() - t0, 1), "cham": cham(q, out)})
+                  "trich_dan_la": out.get("unknown_citations", []),
+                  "truy_hoi": out.get("retrieved_ids") or [u["id"] for u in units],
+                  "ngu_canh": [u["id"] for u in units],
+                  "ngu_canh_text": [f"{u.get('ngu_canh') or ''}\n{u.get('noi_dung') or ''}".strip() for u in units],
+                  "thoi_gian_s": round(time.perf_counter() - t0, 1)})
+        r["cham"] = cham(q, r)
         return r
 
     try:
         with ThreadPoolExecutor(max_workers=max(1, args.song_song)) as ex:
-            futs = [ex.submit(mot_cau, q) for q in qs]
+            futs = [ex.submit(mot_luot, v) for v in viec]
             for i, f in enumerate(as_completed(futs), 1):
                 r = f.result()
                 with lock:
@@ -403,21 +353,18 @@ def main() -> None:
                     with open(p_out, "a", encoding="utf-8") as fo:
                         fo.write(json.dumps(r, ensure_ascii=False) + "\n")
                 if r.get("loi"):
-                    trang_thai = "LỖI  " + r["loi"][:70]
+                    tt = "LỖI " + r["loi"][:70]
                 else:
                     c = r["cham"]
-                    trang_thai = (f"{'ĐÚNG' if c['dung'] else 'SAI '}  tiền {'✓' if c['tien_dung'] else '✗'}"
-                                  + (f"  điểm {'✓' if c['diem_dung'] else '✗'}" if c["diem_dung"] is not None else "")
-                                  + f"  ngữ cảnh {sum(g in r['ngu_canh'] for g in r['gold_ids'])}/{len(r['gold_ids'])}")
-                print(f"[{i:>3}/{n}] {r['id']:<6}{TEN_LOAI.get(r['loai'], r['loai']):<10}{trang_thai}  {r['thoi_gian_s']}s")
+                    tt = (f"R@10 {c['recall@10']:.2f}  FR@40 {c['full_recall@40']:.0f}  "
+                          f"Faith {fmt(c['faithfulness'])}  AR {c['answer_relevance']:.2f}")
+                print(f"[{i:>3}/{n}] {r['id']:<6}{NHAN_HT[r['he_thong']]:<8}{TEN_LOAI.get(r['loai'], r['loai']):<10}"
+                      f"{tt}  {r['thoi_gian_s']}s")
     except KeyboardInterrupt:
-        print("\nĐã dừng. Chạy lại với --tiep để tiếp tục các câu còn lại.")
+        print("\nĐã dừng. Chạy lại với --tiep để tiếp tục các lượt còn lại.")
     finally:
         res.close()
 
-    rows.sort(key=lambda r: r["id"])
-    if args.ragas:
-        chay_ragas(rows, res.cfg, args, p_out)
     p_md, p_csv = bao_cao(rows, args.file, stamp, out_dir)
     tom_tat_man_hinh(rows)
     print(f"\nTổng thời gian {time.perf_counter() - t_all:.0f}s.")

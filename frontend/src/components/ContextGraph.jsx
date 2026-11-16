@@ -10,6 +10,8 @@ export const EDGE_COLORS = {
   BO_SUNG: "#c26a05",
   THAY_THE: "#c26a05",
   BAI_BO: "#c2362b",
+  LIEN_QUAN: "#1f8a4c",        // GraphRAG kiểu Microsoft: quan hệ giữa hai thực thể
+  XUAT_HIEN_TAI: "#a3a39b",    // thực thể → điều khoản nhắc tới nó
 };
 
 export const NODE_COLORS = {
@@ -17,6 +19,8 @@ export const NODE_COLORS = {
   graph: "#e08a1e",
   path: "#c7c7c0",
   center: "#1c1c1a",
+  entity: "#1f8a4c",
+  entity_nb: "#9fd3b0",
   VanBan: "#1c1c1a",
   Chuong: "#55554f",
   Dieu: "#3451d1",
@@ -69,6 +73,9 @@ const STYLE = [
     },
   },
   { selector: "edge[type = 'THUOC']", style: { "line-style": "dashed", label: "" } },
+  { selector: "edge[type = 'XUAT_HIEN_TAI']", style: { "line-style": "dotted", label: "" } },
+  { selector: "edge[type = 'LIEN_QUAN']", style: { "target-arrow-shape": "none" } },
+  { selector: "node[shape]", style: { shape: "data(shape)" } },
   { selector: ".faded", style: { opacity: 0.18 } },
 ];
 

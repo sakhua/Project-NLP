@@ -137,9 +137,10 @@ def format_notes(notes: list[dict] | None) -> str:
     return NOTES_HEADER + "\n".join(lines) + "\n"
 
 
-def build_user(question: str, ngay, units: list[dict], notes: list[dict] | None = None) -> str:
+def build_user(question: str, ngay, units: list[dict], notes: list[dict] | None = None, extra: str = "") -> str:
+    """extra: phần ngữ cảnh bổ sung đặt sau ghi chú hiệu lực (baseline GraphRAG dùng cho thực thể, quan hệ, cộng đồng)."""
     return USER_TEMPLATE.format(ngay=ngay_vn(ngay), n=len(units), context=format_context(units),
-                                notes=format_notes(notes), question=question)
+                                notes=format_notes(notes) + (extra or ""), question=question)
 
 
 _BRACKET = re.compile(r"\[([^\[\]]{3,200})\]")

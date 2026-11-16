@@ -30,7 +30,7 @@ ORDER BY ngay_hieu_luc
 
 CYPHER_NEIGHBORS = """
 MATCH (n {id: $id})
-OPTIONAL MATCH (n)-[r]-(m)
+OPTIONAL MATCH (n)-[r]-(m) WHERE NOT m:ThucThe AND NOT m:CongDong
 WITH n, r, m ORDER BY CASE type(r) WHEN 'THAM_CHIEU' THEN 0 WHEN 'SUA_DOI' THEN 1 WHEN 'THAY_THE' THEN 1
                                     WHEN 'BO_SUNG' THEN 1 WHEN 'BAI_BO' THEN 1 ELSE 2 END, m.id
 WITH n, collect(DISTINCT {id: m.id, label: [l IN labels(m) WHERE l <> 'DonVi'][0], rel: type(r),
@@ -156,13 +156,21 @@ def expand_paths(driver, seed_ids: list[str], hops: int = 1,
         return [dict(r) for r in s.run(query, seed_ids=seed_ids)]
 
 
+MS_NHAN = ("ThucThe", "CongDong")                                  # đồ thị của baseline GraphRAG (ms_store)
+MS_CANH = ("LIEN_QUAN", "XUAT_HIEN_TAI", "THANH_VIEN", "CON_CUA")
+
+
 def graph_counts(driver) -> dict:
-    """Số node, cạnh theo loại (trang Thống kê)."""
+    """Số node, cạnh theo loại của đồ thị văn bản (trang Thống kê); đồ thị thực thể của baseline GraphRAG đếm riêng."""
     with driver.session() as s:
-        nodes = {r["nhan"]: r["n"] for r in s.run(
+        tat_ca = {r["nhan"]: r["n"] for r in s.run(
             "MATCH (n) UNWIND labels(n) AS nhan WITH nhan WHERE nhan <> 'DonVi' RETURN nhan, count(*) AS n")}
-        rels = {r["loai"]: r["n"] for r in s.run("MATCH ()-[r]->() RETURN type(r) AS loai, count(*) AS n")}
-    return {"node": nodes, "canh": rels, "tong_node": sum(nodes.values()), "tong_canh": sum(rels.values())}
+        rels_all = {r["loai"]: r["n"] for r in s.run("MATCH ()-[r]->() RETURN type(r) AS loai, count(*) AS n")}
+    nodes = {k: v for k, v in tat_ca.items() if k not in MS_NHAN}
+    rels = {k: v for k, v in rels_all.items() if k not in MS_CANH}
+    ms = {**{k: v for k, v in tat_ca.items() if k in MS_NHAN}, **{k: v for k, v in rels_all.items() if k in MS_CANH}}
+    return {"node": nodes, "canh": rels, "tong_node": sum(nodes.values()), "tong_canh": sum(rels.values()),
+            "ms_graphrag": ms}
 
 
 def amended_by(driver, ids: list[str]) -> list[dict]:

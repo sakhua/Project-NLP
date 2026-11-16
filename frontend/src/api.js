@@ -27,11 +27,12 @@ async function request(path, { method = "GET", body, headers = {}, timeoutMs = 9
 }
 
 /** Hỏi đáp dạng luồng: gọi onEvent(ev) cho từng dòng NDJSON (step, context, token, done, error). */
-export async function askStream({ question, date, history }, onEvent, signal) {
+export async function askStream({ question, date, history, he_thong, che_do }, onEvent, signal) {
   const res = await fetch(API_URL + "/api/ask/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, date: date || null, history: history || [] }),
+    body: JSON.stringify({ question, date: date || null, history: history || [],
+      he_thong: he_thong || "hybrid_graphrag", che_do: che_do || "local" }),
     signal,
   }).catch((e) => {
     if (e.name === "AbortError") throw e;
@@ -63,6 +64,7 @@ export const api = {
   health: () => request("/health", { timeoutMs: 10000 }),
   healthDb: () => request("/health/db", { timeoutMs: 15000 }),
   overview: () => request("/api/overview"),
+  systems: () => request("/api/systems"),
   feedback: (log_id, rating, note) => request("/api/feedback", { method: "POST", body: { log_id, rating, note } }),
   documents: () => request("/api/documents"),
   units: (docId, date) => request(`/api/documents/${encodeURIComponent(docId)}/units?date=${date}`),

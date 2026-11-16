@@ -15,6 +15,7 @@ __pycache__/
 # Dữ liệu sinh ra
 data/processed/cache/
 data/processed/*.npy
+data/processed/ms_graphrag/*.npy
 db/volumes/
 *.log
 

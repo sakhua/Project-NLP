@@ -7,7 +7,7 @@ Phiên bản 1 – 19/10/2026. Người phụ trách: TV3. Mọi thành viên đ
 
 Bộ câu hỏi dùng để so sánh 4 hệ thống (B1 BM25, B2 vector, B3 hybrid, GraphRAG) trên cùng một chuẩn.
 Mỗi câu phải có **đáp án** và **mã điều khoản căn cứ (gold_ids)** chính xác, vì các độ đo Recall@k,
-Full Recall@k, Citation Precision/Recall, Key-fact Accuracy và Temporal Accuracy đều được tính tự động từ hai trường này.
+Full Recall@k, MRR@k, F2@k, Faithfulness và Answer Relevance (bản không dùng LLM, `docs/do_do_danh_gia.md`) đều được tính tự động từ các trường này.
 
 | Mốc | Số câu mỗi người | Tổng |
 |---|---|---|

@@ -11,7 +11,9 @@ Hướng dẫn cho Claude Code (VS Code) và cho thành viên mới đọc để
 
 Cùng một mã nguồn phục vụ hai môn:
 
-- **Xử lý ngôn ngữ tự nhiên** (môi trường `local`): xây pipeline, so sánh GraphRAG với các baseline B1–B3 trên bộ câu hỏi tự soạn.
+- **Xử lý ngôn ngữ tự nhiên** (môi trường `local`): xây pipeline, so sánh hệ thống đề xuất **Hybrid GraphRAG** với hai baseline
+  **B1 Hybrid RAG** (BM25 + vector + rerank, không đồ thị) và **B2 GraphRAG kiểu Microsoft** (đồ thị thực thể do LLM trích,
+  cộng đồng Leiden, local/global search; cài đặt lại theo Edge và cộng sự, 2024) trên bộ câu hỏi tự soạn (quyết định 05/11, thay B1–B3 cũ).
 - **Điện toán đám mây** (môi trường `cloud`): đưa đúng pipeline đó lên Render, Supabase và Neo4j AuraDB thành web công khai (xem mục "Môn Điện toán đám mây").
 
 Người dùng hỏi bằng tiếng Việt và có thể chọn **ngày áp dụng**. Hệ thống trả lời kèm trích dẫn Điều/Khoản/Điểm **còn hiệu lực tại ngày đó**. Đây là điểm khác biệt chính của đề tài.
@@ -44,6 +46,7 @@ python scripts/kiem_tra_corpus.py       # kiểm tra đánh số, dẫn chiếu 
 python scripts/02_extract_relations.py  # -> amendments.jsonl, versions.jsonl, references.jsonl, versions_report.md
 python scripts/03_embed.py              # -> embedding.npy cho mọi phiên bản (bge-m3 qua OpenRouter, < 0,01 USD)
 python scripts/04_load.py [--env cloud] # nạp vào PostgreSQL + Neo4j (xóa dữ liệu văn bản cũ rồi nạp lại)
+python scripts/05_ms_graphrag_index.py [--gioi-han 100] [--uoc-tinh] [--chi-nap --env cloud]   # chỉ mục baseline B2 (gọi LLM, có lưu đệm; cần ".[msgraph]")
 
 # Tra cứu và kiểm tra câu hỏi
 python scripts/tim_dieu_khoan.py vượt đèn đỏ --van-ban ND168_2024
@@ -51,13 +54,15 @@ python scripts/tim_dieu_khoan.py --ma ND168_2024.D6.K9
 python scripts/check_questions.py data/eval/questions_TV1.jsonl
 python scripts/thu_prompt.py           # thử prompt sinh câu trả lời với ngữ cảnh chuẩn (cần OPENROUTER_API_KEY)
 
-# Đánh giá (chưa xong)
-python -m graphrag.evaluation.run_eval --systems B1 B2 B3 GRAPH
+# Đánh giá: 3 hệ thống (GRAPH = đề xuất, B1 = Hybrid RAG, B2 = GraphRAG kiểu Microsoft), CHỈ dùng 6 độ đo không LLM:
+# Recall@k, Full Recall@k, MRR@k, F2@k, Faithfulness, Answer Relevance (graphrag/evaluation/metrics.py) + paired bootstrap
+python -m graphrag.evaluation.run_eval --systems GRAPH B1 B2 --questions data/eval/bo_test_tu_dong.jsonl
+python scripts/chay_bo_test.py --he-thong hybrid_graphrag hybrid_rag ms_graphrag [--gioi-han 20]
 # Bộ test tự động 200 câu (sinh từ versions.jsonl, KHÔNG phải bộ chính thức) + chạy GraphRAG thật và chấm
 python scripts/sinh_bo_test.py                        # → data/eval/bo_test_tu_dong.jsonl (không ghi đè file đã rà soát)
 streamlit run scripts/ra_soat_app.py                  # giao diện rà soát/sửa bộ câu golden, bấm Lưu ghi thẳng vào JSONL
 python scripts/chay_bo_test.py [--gioi-han 20] [--tiep]   # → data/eval/ket_qua/bao_cao_*.md/.csv
-python scripts/chay_bo_test.py --cham-lai <ket_qua_*.jsonl> --ragas   # thêm Faithfulness, Answer Relevance, Context P/R (pip install -e ".[ragas]")
+python scripts/chay_bo_test.py --cham-lai <ket_qua_*.jsonl>   # chấm lại file kết quả, không gọi API
 
 # Web trên máy (demo): một lệnh bật Docker + backend + frontend, hoặc làm tay 2 dòng dưới
 powershell -ExecutionPolicy Bypass -File scripts\demo.ps1        # bản build, không tự tải lại trang; thêm -Dev khi sửa giao diện
@@ -71,7 +76,21 @@ Nếu sửa schema (`db/schema.sql`, `db/neo4j_constraints.cypher`) thì `04_loa
 
 ## Kiến trúc
 
-Luồng trả lời: `graphrag/pipeline/graph_rag.py::run(...)` phát sự kiện từng bước (backend `/api/ask/stream` gửi cho giao diện dạng NDJSON);
+**Ba hệ thống, một giao diện gọi:** `graphrag/pipeline/he_thong.py::run/answer(res, question, he_thong=..., ngay, history, che_do)`.
+Backend (`he_thong`, `che_do` trong body của `/api/ask(/stream)`, danh sách ở `GET /api/systems`), giao diện (nút chọn + chế độ So sánh
+ba cột) và script đánh giá đều đi qua đây. Cả ba dùng chung `tien_xu_ly` (phân loại, viết lại câu hỏi), prompt, cách trích dẫn, lọc ngày.
+
+| `he_thong` | Mã log | Module | Truy hồi |
+|---|---|---|---|
+| `hybrid_graphrag` (mặc định) | GRAPH | `pipeline/graph_rag.py` | các bước 0–4 dưới đây |
+| `hybrid_rag` | B1 | `pipeline/baseline_rag.py` | = `graph_rag.run(hops=0)`: bỏ bước mở rộng đồ thị |
+| `ms_graphrag` | B2 | `pipeline/ms_graphrag.py` | local: vector trên mô tả thực thể → thực thể lân cận → báo cáo cộng đồng + điều khoản gắn thực thể (lọc ngày); global: map-reduce trên báo cáo cộng đồng |
+
+Chỉ mục B2: `scripts/05_ms_graphrag_index.py` + `graphrag/ms_graphrag/` (prompt tiếng Việt, trích xuất, gộp, Leiden phân cấp, báo cáo),
+lưu ở bảng `ms_*` (`db/ms_graphrag.sql`, `storage/ms_store.py`) và bản sao `:ThucThe`/`:CongDong` trong Neo4j (chỉ để xem; `graph_counts` đếm riêng).
+`04_load.py` xóa toàn bộ Neo4j → sau đó chạy `05 --chi-nap` để nạp lại phần B2. Kết quả trung gian và lưu đệm LLM: `data/processed/ms_graphrag/`.
+
+Luồng trả lời của hệ thống đề xuất: `graphrag/pipeline/graph_rag.py::run(...)` phát sự kiện từng bước (backend `/api/ask/stream` gửi cho giao diện dạng NDJSON);
 `answer(res, question, ngay, history=None)` gom kết quả cuối, dùng cho đánh giá.
 
 0. **Hội thoại:** có `history` thì LLM viết lại câu hỏi tiếp nối thành câu đầy đủ (`pipeline/conversation.py`).
@@ -104,6 +123,8 @@ Hai kho dữ liệu nối với nhau bằng **mã định danh chung**:
 | Trả lời | `openai/gpt-4o-mini` |
 | LLM-judge | `openai/gpt-4o` |
 
+Hai khóa: phần **chat** (trả lời, dựng chỉ mục B2) dùng `OPENAI_API_KEY` trước, khi khóa OpenAI hết quota thì chuyển hẳn sang OpenRouter; thứ tự ở `llm.nha_cung_cap`. Cùng mô hình `gpt-4o-mini` (bỏ tiền tố `openai/`). Embedding bge-m3 và rerank Cohere chỉ có trên OpenRouter, nên khóa OpenRouter vẫn cần còn chút hạn mức.
+
 Muốn đổi mô hình thì chỉ sửa tên trong YAML, không sửa code. Không có mô hình nào chạy trên máy chủ, nên bản cloud 512 MB RAM chạy đúng pipeline của bản đánh giá.
 
 **Cấu hình** (`graphrag/common/config.py::load_config(env)`):
@@ -123,7 +144,8 @@ Muốn đổi mô hình thì chỉ sửa tên trong YAML, không sửa code. Kh�
 | `graphrag/storage/` | `postgres.py`, `neo4j_store.py` | TV2, TV1 |
 | `graphrag/retrieval/` | `bm25.py`, `fusion.py`, `rerank.py` | TV3 |
 | `graphrag/embedding/`, `graphrag/llm/` | `get_embedder(cfg)`, `get_llm(cfg, role)` | TV3, TV1 |
-| `graphrag/pipeline/` | `baseline_rag.py` (B1 BM25, B2 vector, B3 lai + rerank), `graph_rag.py`, `prompts.py` | TV3, TV1 |
+| `graphrag/pipeline/` | `he_thong.py` (chọn hệ thống), `graph_rag.py` (đề xuất), `baseline_rag.py` (B1), `ms_graphrag.py` (B2), `prompts.py` | TV3, TV1 |
+| `graphrag/ms_graphrag/` | dựng chỉ mục GraphRAG kiểu Microsoft: `indexing.py`, `prompts.py` | TV1 |
 | `graphrag/evaluation/` | `metrics.py`, `judge.py`, `run_eval.py` | TV3 |
 | `backend/app/` | FastAPI: routers ask, documents, graph, feedback, admin; `/health`, `/health/db` | TV1 (cloud) |
 | `frontend/` | React + Vite, 4 trang: Hỏi đáp, Tra cứu, Đồ thị, Quản trị | TV3 (cloud) |
@@ -153,7 +175,13 @@ Muốn đổi mô hình thì chỉ sửa tên trong YAML, không sửa code. Kh�
   - `gold_ids` là mã đơn vị của văn bản bị sửa (không ghi mã văn bản sửa đổi); mã văn bản sửa đổi ghi ở `nguon_sua_doi`.
   - **Không dùng LLM để viết đáp án hoặc gold**, chỉ được dùng LLM để gợi ý câu hỏi.
 
-## Trạng thái (cập nhật 28/10/2026)
+## Trạng thái (cập nhật 05/11/2026)
+
+**05/11:** thêm hai baseline và chọn hệ thống: B1 Hybrid RAG (`baseline_rag.py`), B2 GraphRAG kiểu Microsoft (`ms_graphrag.py`,
+`graphrag/ms_graphrag/`, `scripts/05_ms_graphrag_index.py`); API `he_thong`/`che_do`, `GET /api/systems`; giao diện chọn hệ thống
+và chế độ So sánh ba cột; `chay_bo_test.py --he-thong …` (6 độ đo không LLM + paired bootstrap; quyết định 05/11: không dùng LLM-judge/RAGAS). Mới kiểm thử bằng LLM/embedding giả
+(`tests/test_ms_graphrag.py`, PostgreSQL thật). **Việc tiếp theo:** chạy `05 --gioi-han 100` với OpenRouter thật, xem
+`data/processed/ms_graphrag/thong_ke.md`, rồi chạy toàn bộ; sau khi nhóm rà soát xong bộ câu thì chạy so sánh 3 hệ thống.
 
 **28/10:** dữ liệu đã nạp vào PostgreSQL + Neo4j trên máy (3.078 node, 5.201 cạnh). Đã có `graph_rag.run/answer` (GraphRAG v0 +
 hội thoại + streaming), API `/api/ask/stream`, `/api/units/search`, `/api/amended`, `/api/overview`, frontend 5 trang
@@ -179,9 +207,9 @@ chưa có tài khoản Render/Supabase/AuraDB trong repo; thiếu `ci.yml`, `.en
 **Việc tiếp theo, theo thứ tự:**
 
 1. ~~Bật Docker → 02 → 03 → 04~~ đã xong 25/10. Trước demo: `python scripts/kiem_tra_demo.py`, sửa câu XEM LẠI: TV1.
-2. `baseline_rag.py`: B1 BM25, B2 vector, B3 lai + rerank (`raise NotImplementedError`): TV3.
+2. ~~`baseline_rag.py`~~ đã xong 05/11 (B1 Hybrid RAG; B2 là GraphRAG kiểu Microsoft).
 3. `graph_rag` v0 đã có (28/10); v1 theo `docs/thiet_ke_do_thi.md` mục 7 sau demo: TV1.
-4. `evaluation/judge.py`, `run_eval.py`; chạy thử cả 4 hệ thống trên 5 câu mẫu: TV3.
+4. ~~`run_eval.py`~~ gọi `chay_bo_test.py` (05/11); còn `evaluation/judge.py`: TV3.
 5. Sau khi hệ thống chạy được: soạn bộ câu hỏi (~200 câu) theo `docs/huong_dan_gan_nhan.md`: cả nhóm.
 6. Song song: sửa 2 lỗi parser, kiểm tra tay thao tác sửa đổi và dẫn chiếu (`huong_dan_chay_db.md` mục 7): TV2.
    Nhập tay sửa đổi "đoạn thứ hai" của NĐ 238 khoản 2 Điều 17. Bảng `HUONG_DAN` lập tay (`data/reference/huong_dan.csv`): TV1 + TV2.

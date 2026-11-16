@@ -1,7 +1,9 @@
 """Độ đo truy xuất và câu trả lời. Phụ trách: TV3.
 
-Truy xuất: recall@k, full_recall@k, mrr@k, f2@k (tự viết, khớp cách tính của ALQAC/VLSP).
-Câu trả lời: key_fact_accuracy (so khớp số tiền, số điểm), citation P/R.
+Bộ độ đo dùng trong đề tài (chỉ 6 độ đo, không dùng LLM chấm; định nghĩa: docs/do_do_danh_gia.md):
+  Truy xuất: recall_at_k, full_recall_at_k, mrr_at_k, f2_at_k (tự viết, khớp cách tính của ALQAC/VLSP).
+  Câu trả lời: faithfulness_khong_llm, answer_relevance_khong_llm.
+Các hàm key_fact_accuracy, citation_pr giữ lại cho scripts/thu_prompt.py, không đưa vào báo cáo.
 """
 from __future__ import annotations
 
@@ -74,3 +76,70 @@ def citation_pr(gold: list[str], cited: list[str]) -> tuple[float, float]:
         return 0.0, 0.0
     hit = len(g & c)
     return hit / len(c), (hit / len(g) if g else 0.0)
+
+
+# ---------------------------------------------------------------- Faithfulness, Answer Relevance KHÔNG dùng LLM
+# Thay cho bản LLM-judge của RAGAS: tách các "dữ kiện kiểm chứng được" trong câu trả lời (mức tiền, số điểm trừ,
+# mã điều khoản được trích) rồi so khớp bằng quy tắc. Tất định, không tốn API, lặp lại được.
+
+def so_tien_trong(text: str) -> set[int]:
+    """Mức tiền (đồng): '18.000.000', '18 triệu', 'từ 18 đến 20 triệu', '1,5 triệu', '500 nghìn'."""
+    t = (text or "").replace(" ", " ")
+    out = {int(x.replace(".", "").replace(",", "")) for x in re.findall(r"\d{1,3}(?:[.,]\d{3})+(?![.,]?\d)", t)}
+
+    def num(s: str) -> float:
+        return float(s.replace(",", "."))
+
+    for a, b, dv in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:đến|–|-|tới)\s*(\d+(?:[.,]\d+)?)\s*(triệu|nghìn|ngàn)", t):
+        k = 1_000_000 if dv == "triệu" else 1_000
+        out |= {round(num(a) * k), round(num(b) * k)}
+    for a, dv in re.findall(r"(\d+(?:[.,]\d+)?)\s*(triệu|nghìn|ngàn)", t):
+        out.add(round(num(a) * (1_000_000 if dv == "triệu" else 1_000)))
+    return {x for x in out if x >= 1000}
+
+
+def so_diem_trong(text: str) -> set[int]:
+    """Số điểm giấy phép lái xe: '04 điểm', 'trừ 6 điểm', '12 điểm' (không nhầm với 'điểm b khoản 9')."""
+    return {int(x) for x in re.findall(r"(?<![\d.,])(\d{1,2})\s*điểm\b", text or "")}
+
+
+def du_kien(text: str) -> set[tuple[str, int]]:
+    return {("tien", x) for x in so_tien_trong(text)} | {("diem", x) for x in so_diem_trong(text)}
+
+
+_PHU_DINH = re.compile(r"chưa (bị|có|áp dụng|được)|không (bị|có quy định|áp dụng|thuộc)|hết hiệu lực|chưa có hiệu lực",
+                       re.IGNORECASE)
+
+
+def faithfulness_khong_llm(answer: str, context: list[str], cited_ok: list[str], cited_bad: list[str]) -> float | None:
+    """Tỉ lệ dữ kiện trong câu trả lời có căn cứ trong ngữ cảnh đã đưa cho LLM.
+
+    Dữ kiện: mỗi mức tiền, mỗi số điểm trừ (phải xuất hiện trong nội dung các điều khoản ngữ cảnh) và mỗi mã được
+    trích (phải là điều khoản có trong ngữ cảnh). None nếu câu trả lời không nêu dữ kiện nào (không chấm).
+    """
+    ctx = du_kien("\n".join(context))
+    a = du_kien(answer)
+    tong = len(a) + len(cited_ok) + len(cited_bad)
+    if tong == 0:
+        return None
+    return (len(a & ctx) + len(cited_ok)) / tong
+
+
+def answer_relevance_khong_llm(answer: str, so_tien: list[int], dap_an: str, diem_tru: int | None = None) -> float:
+    """Câu trả lời đáp đúng trọng tâm câu hỏi đến đâu, so với đáp án chuẩn: F1 giữa dữ kiện của câu trả lời và của
+    đáp án chuẩn (mức tiền trong so_tien + số điểm trong đáp án / diem_tru).
+
+    Câu đáp án chuẩn không có dữ kiện (vd. "chưa bị xử phạt vì quy định chưa có hiệu lực"): 1 nếu câu trả lời nói rõ
+    là không/chưa áp dụng, ngược lại 0.
+    """
+    g = {("tien", x) for x in so_tien or []} | {("diem", x) for x in so_diem_trong(dap_an)}
+    if diem_tru:
+        g.add(("diem", int(diem_tru)))
+    if not g:
+        return 1.0 if _PHU_DINH.search(answer or "") else 0.0
+    a = du_kien(answer)
+    hit = len(a & g)
+    if not hit:
+        return 0.0
+    p, r = hit / len(a), hit / len(g)
+    return 2 * p * r / (p + r)

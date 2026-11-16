@@ -97,6 +97,25 @@ def test_answer_seed_graph_and_citations(res):
     assert [s["key"] for s in out["steps"]] == ["intent", "search", "rerank", "graph", "context", "generate"]
 
 
+def test_step_details(res):
+    """Mỗi bước có chi tiết (thuật toán, tham số, bảng) cho tab Quy trình."""
+    import json
+
+    out = graph_rag.answer(res, "Ô tô vượt đèn đỏ bị phạt bao nhiêu?", ngay=D("2026-09-01"))
+    ct = {s["key"]: s["chi_tiet"] for s in out["steps"]}
+    assert all(c["thuat_toan"] for c in ct.values())
+    json.dumps(ct)                                                            # gửi được qua API
+    rrf = ct["search"]["bang"][0]
+    assert rrf["cot"][-1] == "Điểm RRF" and rrf["dong"][0]["kieu"] == "giu"
+    rr = ct["rerank"]["bang"][0]["dong"]
+    giu = [d["id"] for d in rr if d["kieu"] == "giu"]
+    assert giu == [u["id"] for u in out["units"] if u["origin"] == "seed"]  # bảng khớp seed thật
+    g = ct["graph"]["bang"][0]["dong"]
+    assert any(d["id"] == "ND168_2024.D6.K16.b" and d["o"][3] == "dẫn chiếu" and d["kieu"] == "giu" for d in g)
+    assert [d["id"] for d in ct["context"]["bang"][0]["dong"]] == [u["id"] for u in out["units"]]
+    assert {d["o"][2] for d in ct["generate"]["bang"][0]["dong"]} == {"Hợp lệ", "Mã lạ (không có trong ngữ cảnh)"}
+
+
 def test_not_yet_valid_note(res):
     out = graph_rag.answer(res, "Chở trẻ em ngồi ghế trước bị phạt không?", ngay=D("2025-10-01"))
     assert all(u["id"] != "ND168_2024.D6.K3.m" for u in out["units"])     # chưa có hiệu lực → không vào ngữ cảnh
@@ -192,3 +211,13 @@ def test_pipeline_greeting_and_off_topic_skip_retrieval(res):
     res.llm = LabelLLM("NGOAI")
     out = graph_rag.answer(res, "Giá vàng hôm nay thế nào?")
     assert out["intent"] == "ngoai_pham_vi" and "không thuộc phạm vi" in out["answer"]
+
+
+# ---------------- B1 Hybrid RAG ----------------
+def test_hybrid_rag_has_no_graph_step(res, monkeypatch):
+    from graphrag.pipeline import baseline_rag
+
+    monkeypatch.setattr(graph_rag.neo4j_store, "expand_paths", lambda *a, **k: pytest.fail("B1 không dùng đồ thị"))
+    out = baseline_rag.answer(res, "Ô tô vượt đèn đỏ bị phạt bao nhiêu?", ngay=D("2026-09-01"))
+    assert [s["key"] for s in out["steps"]] == ["intent", "search", "rerank", "context", "generate"]
+    assert all(u["origin"] == "seed" for u in out["units"]) and "ND168_2024.D6.K16.b" not in out["citations"]
