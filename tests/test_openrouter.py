@@ -142,3 +142,49 @@ def test_get_client_chi_co_mot_khoa():
 
     c = get_client({"secrets": {"openrouter_api_key": "", "openai_api_key": "sk-x"}, "llm": {}})
     assert [x.ten for x in c.clients] == ["openai"]
+
+
+def test_tham_so_theo_nha_cung_cap_va_tu_bo_temperature():
+    """OpenAI: max_completion_tokens, reasoning_effort; mô hình không nhận temperature thì bỏ và ghi nhớ."""
+    bodies = []
+
+    def oa_handler(req):
+        b = json.loads(req.content)
+        bodies.append(b)
+        if "temperature" in b:
+            return httpx.Response(400, json={"error": {"message": "Unsupported value: 'temperature' does not support 0 "
+                                                                  "with this model. Only the default (1) value is supported."}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}],
+                                         "usage": {"prompt_tokens": 100, "completion_tokens": 20,
+                                                   "prompt_tokens_details": {"cached_tokens": 40},
+                                                   "completion_tokens_details": {"reasoning_tokens": 5}}})
+
+    c = _ncc("openai", oa_handler)
+    assert c.chat("gpt-6-luna", "s", "u", 0.0, 500, "low") == "ok"
+    assert bodies[-1]["max_completion_tokens"] == 500 and bodies[-1]["reasoning_effort"] == "low"
+    assert "max_tokens" not in bodies[-1]
+    n = len(bodies)
+    assert c.chat("gpt-6-luna", "s", "u") == "ok" and len(bodies) == n + 1      # lần sau không gửi temperature nữa
+    assert c.usage == {"prompt": 200, "cached": 80, "completion": 40, "reasoning": 10, "calls": 2}
+
+    or_bodies = []
+
+    def or_handler(req):
+        or_bodies.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    _ncc("openrouter", or_handler).chat("openai/gpt-6-luna", "s", "u", 0.0, 300, "low")
+    assert or_bodies[0]["max_tokens"] == 300 and or_bodies[0]["reasoning"] == {"effort": "low"}
+
+
+def test_chat_messages_nhieu_luot():
+    from graphrag.openrouter import DuPhong
+
+    def handler(req):
+        msgs = json.loads(req.content)["messages"]
+        return httpx.Response(200, json={"choices": [{"message": {"content": "/".join(m["role"] for m in msgs)}}]})
+
+    c = DuPhong([_ncc("openai", handler)])
+    out = c.chat_messages("openai/gpt-6-luna", [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"},
+                                                {"role": "user", "content": "c"}])
+    assert out == "user/assistant/user"

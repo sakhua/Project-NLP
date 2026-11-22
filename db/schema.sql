@@ -56,3 +56,16 @@ CREATE TABLE IF NOT EXISTS hoi_dap_log (
   ghi_chu       TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_hoi_dap_thoi_gian ON hoi_dap_log (thoi_gian);
+
+-- Tài khoản đăng nhập giao diện web (không có đăng ký: tạo bằng scripts/tao_tai_khoan.py; backend tự tạo bảng nếu thiếu)
+CREATE TABLE IF NOT EXISTS tai_khoan (
+  id               BIGSERIAL PRIMARY KEY,
+  ten_dang_nhap    TEXT UNIQUE NOT NULL,
+  mat_khau_bam     TEXT NOT NULL,            -- pbkdf2_sha256$số_vòng$muối$băm
+  ho_ten           TEXT,
+  hoat_dong        BOOLEAN NOT NULL DEFAULT true,
+  tao_luc          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  dang_nhap_cuoi   TIMESTAMPTZ,
+  so_lan_dang_nhap INTEGER NOT NULL DEFAULT 0
+);
+ALTER TABLE hoi_dap_log ADD COLUMN IF NOT EXISTS tai_khoan_id BIGINT REFERENCES tai_khoan(id);

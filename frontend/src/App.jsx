@@ -1,7 +1,8 @@
 // Khung giao diện: thanh bên (điều hướng, lịch sử trò chuyện, trạng thái máy chủ) + trang đang mở.
 import { useEffect, useState } from "react";
-import { BarChart3, BookOpen, History, MessageSquare, Plus, Scale, Trash2, Waypoints } from "lucide-react";
+import { BarChart3, BookOpen, History, LogOut, MessageSquare, Plus, Scale, Trash2, Waypoints } from "lucide-react";
 import { api } from "./api.js";
+import { clearSession, useSession } from "./lib/auth.js";
 import { useConversations } from "./lib/conversations.js";
 import { navigate, useRoute } from "./lib/router.js";
 import AskPage from "./pages/AskPage.jsx";
@@ -9,6 +10,7 @@ import DocumentsPage from "./pages/DocumentsPage.jsx";
 import HistoryPage from "./pages/HistoryPage.jsx";
 import GraphPage from "./pages/GraphPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 
 const NAV = [
   { key: "chat", label: "Trò chuyện", icon: MessageSquare },
@@ -48,7 +50,44 @@ function ServerStatus() {
   );
 }
 
+function UserChip({ user }) {
+  if (!user) return null;
+  return (
+    <div className="user-chip">
+      <span className="avatar">{(user.ho_ten || user.ten_dang_nhap || "?").trim().split(/\s+/).pop()[0].toUpperCase()}</span>
+      <div className="grow">
+        <div className="user-name">{user.ho_ten || user.ten_dang_nhap}</div>
+        <div className="user-mail">{user.ten_dang_nhap}</div>
+      </div>
+      <button className="icon-btn" title="Đăng xuất" onClick={clearSession}><LogOut size={15} /></button>
+    </div>
+  );
+}
+
+/** Đọc cấu hình đăng nhập của backend; bắt buộc đăng nhập mà chưa có phiên thì hiện trang đăng nhập. */
 export default function App() {
+  const session = useSession();
+  const [cfg, setCfg] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api.authConfig().then(setCfg).catch((e) => setErr(e.message));
+  }, []);
+  if (err) {
+    return (
+      <div className="auth-page"><div className="login-card">
+        <div className="banner error">{err}</div>
+        <button className="btn" onClick={() => window.location.reload()}>Thử lại</button>
+      </div></div>
+    );
+  }
+  if (!cfg) {
+    return <div className="auth-page"><div className="login-card muted">Đang kết nối máy chủ… (lần đầu có thể mất khoảng 1 phút)</div></div>;
+  }
+  if (cfg.bat_buoc && !session) return <LoginPage />;
+  return <Shell user={cfg.bat_buoc ? session?.nguoi_dung : null} />;
+}
+
+function Shell({ user }) {
   const route = useRoute();
   const convs = useConversations();
   const page = NAV.some((n) => n.key === route.page) ? route.page : "chat";
@@ -95,6 +134,7 @@ export default function App() {
             </div>
           ))}
         </div>
+        <UserChip user={user} />
         <ServerStatus />
       </aside>
       <main className="main">

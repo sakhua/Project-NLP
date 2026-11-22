@@ -21,9 +21,11 @@ reranker:
 llm:
   provider: openrouter
   nha_cung_cap: [openai, openrouter]   # chat: dùng OpenAI trước; khóa hết tiền/hạn mức thì chuyển hẳn sang khóa sau. Embedding, rerank luôn qua OpenRouter
-  model: openai/gpt-4o-mini   # mô hình sinh câu trả lời, dùng chung cho B1–B3 và GraphRAG
-  temperature: 0.0
+  model: openai/gpt-6-luna    # mô hình sinh câu trả lời, viết lại/phân loại câu hỏi; dùng chung cho cả 3 hệ thống
+  temperature: 0.0           # mô hình không nhận temperature thì client tự bỏ tham số này (xem scripts/thu_mo_hinh.py)
   max_tokens: 1024
+  reasoning_effort: low      # GPT-6 Luna có suy luận ngầm (tính tiền như token ra); low giảm chi phí. Để trống = mặc định của mô hình
+  gia_usd_trieu_token: {vao: 0.10, vao_cache: 0.01, ra: 0.50}   # giá GPT-6 Luna (11/2026) để ước tính chi phí
 
 retrieval:
   top_k_bm25: 50
@@ -42,7 +44,9 @@ conversation:
   history_turns: 3   # số lượt hỏi đáp gần nhất dùng để hiểu câu hỏi tiếp nối ("còn xe máy thì sao?")
 
 ms_graphrag:            # baseline B2: GraphRAG kiểu Microsoft (scripts/05_ms_graphrag_index.py, pipeline/ms_graphrag.py)
-  model: openai/gpt-4o-mini   # mô hình trích thực thể, tóm tắt, viết báo cáo cộng đồng, map/reduce của global search
+  ban: goc                    # goc: GraphRAG gốc của Microsoft, chỉ đổi chunk thành Điều/Khoản/Điểm (mục ms_graphrag_goc)
+                              # luat: bản đã chỉnh cho luật giao thông (8 loại thực thể, JSON, lọc theo ngày) – tạm không dùng
+  model: openai/gpt-6-luna    # mô hình trích thực thể, tóm tắt, viết báo cáo cộng đồng, map/reduce của global search
   max_tokens: 3000
   gleaning: 0                 # số vòng hỏi lại thực thể bị sót (bản gốc dùng 1; tăng chi phí trích xuất gấp đôi)
   nguong_tom_tat: 200         # sau khi bỏ mô tả trùng, còn ≥ 2 mô tả và nối lại dài hơn (ký tự) thì nhờ LLM tóm tắt
@@ -62,7 +66,30 @@ ms_graphrag:            # baseline B2: GraphRAG kiểu Microsoft (scripts/05_ms_
   global_batch: 6             # số báo cáo mỗi lượt map
   global_top_points: 20
 
+auth:                   # đăng nhập giao diện web bằng tài khoản có sẵn (backend/app/auth.py); không có đăng ký
+  bat_buoc: true        # phải đăng nhập mới dùng được hỏi đáp, tra cứu, đồ thị. Tạo tài khoản: scripts/tao_tai_khoan.py
+  han_phien_ngay: 7     # phiên đăng nhập hết hạn sau số ngày này
+
 evaluation:
   ks: [5, 10]
   judge_model: openai/gpt-4o  # LLM-judge nên mạnh hơn mô hình được chấm
   judge_sample_for_kappa: 40
+
+ms_graphrag_goc:        # B2 theo GraphRAG gốc (microsoft/graphrag 3.x, giá trị mặc định), chỉ khác: chunk = phiên bản Điều/Khoản/Điểm
+  entity_types: [organization, person, geo, event]   # DEFAULT_ENTITY_TYPES
+  max_gleanings: 1            # extract_graph.max_gleanings
+  summarize_max_length: 500   # summarize_descriptions.max_length (từ)
+  report_max_length: 2000     # community_reports.max_length (từ)
+  report_max_input_tokens: 8000
+  max_cluster_size: 10        # cluster_graph.max_cluster_size
+  max_level: 10               # Leiden phân cấp tới khi mọi cộng đồng <= max_cluster_size
+  max_tokens: 4000            # giới hạn đầu ra mỗi lượt gọi khi dựng chỉ mục
+  # local search (LocalSearchDefaults)
+  top_k_entities: 10          # map_query_to_entities lấy k × 2 (oversample_scaler = 2)
+  top_k_relationships: 10
+  max_context_tokens: 12000
+  text_unit_prop: 0.5
+  community_prop: 0.15
+  response_type: multiple paragraphs
+  answer_max_tokens: 2000
+  temporal_filter: false      # bản gốc không có khái niệm hiệu lực: không lọc theo ngày

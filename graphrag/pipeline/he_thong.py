@@ -20,8 +20,9 @@ HE_THONG = {
     "hybrid_rag": {"ten": "Hybrid RAG (B1)", "ma": "B1",
                    "mo_ta": "Tìm kiếm lai BM25 + vector, gộp RRF, rerank; không dùng đồ thị",
                    "steps": baseline_rag.STEPS},
-    "ms_graphrag": {"ten": "GraphRAG kiểu Microsoft (B2)", "ma": "B2",
-                    "mo_ta": "Đồ thị thực thể do LLM trích, cộng đồng Leiden, local search (global cho câu hỏi tổng quan)",
+    "ms_graphrag": {"ten": "GraphRAG Microsoft (B2)", "ma": "B2",
+                    "mo_ta": "GraphRAG gốc của Microsoft (chunk = Điều/Khoản/Điểm): đồ thị thực thể do LLM trích, "
+                             "cộng đồng Leiden, local search; không lọc theo ngày",
                     "steps": ms_graphrag.STEPS},
 }
 

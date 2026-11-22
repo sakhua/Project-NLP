@@ -4,8 +4,15 @@ from fastapi.testclient import TestClient
 from backend.app.main import app
 
 
+def _mo(client):
+    """Các kiểm thử dưới đây chạy khi tắt đăng nhập (auth.bat_buoc = false)."""
+    client.app.state.res.cfg["auth"]["bat_buoc"] = False
+    return client
+
+
 def test_health_and_not_ready_endpoints():
     with TestClient(app) as client:  # "with" để chạy lifespan (tạo Resources)
+        _mo(client)
         r = client.get("/health")
         assert r.status_code == 200 and r.json()["status"] == "ok"
 
@@ -40,6 +47,7 @@ def test_ask_stream_ndjson(monkeypatch):
 
     monkeypatch.setattr(graph_rag, "run", fake_run)
     with TestClient(app) as client:
+        _mo(client)
         r = client.post("/api/ask/stream", json={"question": "Còn xe máy thì sao?", "date": "2026-09-01",
                                                  "history": [{"role": "user", "content": "Ô tô vượt đèn đỏ?"}]})
         lines = [json.loads(x) for x in r.text.splitlines()]
@@ -58,6 +66,7 @@ def test_ask_stream_reports_error(monkeypatch):
 
     monkeypatch.setattr(graph_rag, "run", broken)
     with TestClient(app) as client:
+        _mo(client)
         r = client.post("/api/ask/stream", json={"question": "Ô tô vượt đèn đỏ?"})
         ev = json.loads(r.text.splitlines()[-1])
         assert ev["type"] == "error" and "Docker" in ev["message"]

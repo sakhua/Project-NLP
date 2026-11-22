@@ -84,9 +84,10 @@ ba cột) và script đánh giá đều đi qua đây. Cả ba dùng chung `tien
 |---|---|---|---|
 | `hybrid_graphrag` (mặc định) | GRAPH | `pipeline/graph_rag.py` | các bước 0–4 dưới đây |
 | `hybrid_rag` | B1 | `pipeline/baseline_rag.py` | = `graph_rag.run(hops=0)`: bỏ bước mở rộng đồ thị |
-| `ms_graphrag` | B2 | `pipeline/ms_graphrag.py` | local: vector trên mô tả thực thể → thực thể lân cận → báo cáo cộng đồng + điều khoản gắn thực thể (lọc ngày); global: map-reduce trên báo cáo cộng đồng |
+| `ms_graphrag` | B2 | `ms_graphrag.ban: goc` (mặc định) → `pipeline/ms_graphrag_goc.py`; `luat` → `pipeline/ms_graphrag.py` | goc: local search gốc của Microsoft (20 thực thể, ngân sách 12.000 token: Reports 15%, Sources 50%), prompt gốc, KHÔNG lọc theo ngày, trích dẫn `[Data: Sources (id)]` đổi về mã điều khoản; luat: bản đã chỉnh cho luật (tạm không dùng) |
 
-Chỉ mục B2: `scripts/05_ms_graphrag_index.py` + `graphrag/ms_graphrag/` (prompt tiếng Việt, trích xuất, gộp, Leiden phân cấp, báo cáo),
+Chỉ mục B2 bản gốc (từ 22/11): `scripts/05_ms_graphrag_index.py --ban goc` + `ms_graphrag/indexing_goc.py`, `prompts_goc.py` (prompt nguyên văn microsoft/graphrag 3.3.0, 4 loại thực thể mặc định, gleaning 1, Leiden trên thành phần liên thông lớn nhất), chỉ đổi chunk thành phiên bản Điều/Khoản/Điểm; lưu ở `data/processed/ms_graphrag_goc/` và bảng `msg_*` (`db/ms_graphrag_goc.sql`, `storage/msg_store.py`).
+Chỉ mục B2 bản luật (cũ): `graphrag/ms_graphrag/` (prompt tiếng Việt, trích xuất, gộp, Leiden phân cấp, báo cáo),
 lưu ở bảng `ms_*` (`db/ms_graphrag.sql`, `storage/ms_store.py`) và bản sao `:ThucThe`/`:CongDong` trong Neo4j (chỉ để xem; `graph_counts` đếm riêng).
 `04_load.py` xóa toàn bộ Neo4j → sau đó chạy `05 --chi-nap` để nạp lại phần B2. Kết quả trung gian và lưu đệm LLM: `data/processed/ms_graphrag/`.
 
@@ -120,10 +121,10 @@ Hai kho dữ liệu nối với nhau bằng **mã định danh chung**:
 |---|---|
 | Embedding | `baai/bge-m3` (1024 chiều) |
 | Rerank | `cohere/rerank-v3.5` |
-| Trả lời | `openai/gpt-4o-mini` |
+| Trả lời, dựng chỉ mục B2 | `openai/gpt-6-luna` (từ 22/11; kết quả 16/11 dùng `gpt-4o-mini`) |
 | LLM-judge | `openai/gpt-4o` |
 
-Hai khóa: phần **chat** (trả lời, dựng chỉ mục B2) dùng `OPENAI_API_KEY` trước, khi khóa OpenAI hết quota thì chuyển hẳn sang OpenRouter; thứ tự ở `llm.nha_cung_cap`. Cùng mô hình `gpt-4o-mini` (bỏ tiền tố `openai/`). Embedding bge-m3 và rerank Cohere chỉ có trên OpenRouter, nên khóa OpenRouter vẫn cần còn chút hạn mức.
+Hai khóa: phần **chat** (trả lời, dựng chỉ mục B2) dùng `OPENAI_API_KEY` trước, khi khóa OpenAI hết quota thì chuyển hẳn sang OpenRouter; thứ tự ở `llm.nha_cung_cap`. Cùng mô hình `gpt-6-luna` (bỏ tiền tố `openai/`). Client tự đổi `max_tokens` → `max_completion_tokens` khi gọi OpenAI, tự bỏ `temperature`/`reasoning_effort` nếu mô hình không nhận, và đếm token (`client.usage`). Thử trước bằng `python scripts/thu_mo_hinh.py`. Embedding bge-m3 và rerank Cohere chỉ có trên OpenRouter, nên khóa OpenRouter vẫn cần còn chút hạn mức.
 
 Muốn đổi mô hình thì chỉ sửa tên trong YAML, không sửa code. Không có mô hình nào chạy trên máy chủ, nên bản cloud 512 MB RAM chạy đúng pipeline của bản đánh giá.
 

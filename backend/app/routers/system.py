@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from graphrag.storage import ms_store, neo4j_store, postgres
+from graphrag.storage import ms_store, msg_store, neo4j_store, postgres
 
 from ..deps import get_res
 
@@ -18,8 +18,11 @@ def overview(res=Depends(get_res)):
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM hoi_dap_log")
             out["so_cau_hoi"] = cur.fetchone()[0]
-        try:   # chỉ mục baseline GraphRAG kiểu Microsoft (có thể chưa dựng)
-            out["ms_graphrag"] = ms_store.dem(conn)
+        try:   # chỉ mục baseline GraphRAG kiểu Microsoft (có thể chưa dựng); bản gốc đọc bảng msg_*
+            if res.cfg.get("ms_graphrag", {}).get("ban", "goc") == "goc":
+                out["ms_graphrag"] = msg_store.dem(conn, ten_cu=True)
+            else:
+                out["ms_graphrag"] = ms_store.dem(conn)
         except Exception:  # noqa: BLE001
             conn.rollback()
             out["ms_graphrag"] = None

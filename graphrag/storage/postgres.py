@@ -259,11 +259,17 @@ def overview(conn) -> dict:
 
 # ---------- Nhật ký hỏi đáp (API /api/ask, /api/feedback, /api/admin/stats) ----------
 def log_question(conn, cau_hoi: str, ngay: date, he_thong: str, tra_loi: str,
-                 trich_dan: list[str], latency_ms: int) -> int:
+                 trich_dan: list[str], latency_ms: int, tai_khoan_id: int | None = None) -> int:
     with conn.cursor() as cur:
-        cur.execute("""INSERT INTO hoi_dap_log (cau_hoi, ngay_ap_dung, he_thong, tra_loi, trich_dan, latency_ms)
-                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
-                    (cau_hoi, ngay, he_thong, tra_loi, trich_dan, latency_ms))
+        if tai_khoan_id is None:   # chưa bật đăng nhập: bảng có thể chưa có cột tai_khoan_id
+            cur.execute("""INSERT INTO hoi_dap_log (cau_hoi, ngay_ap_dung, he_thong, tra_loi, trich_dan, latency_ms)
+                           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                        (cau_hoi, ngay, he_thong, tra_loi, trich_dan, latency_ms))
+        else:
+            cur.execute("""INSERT INTO hoi_dap_log (cau_hoi, ngay_ap_dung, he_thong, tra_loi, trich_dan, latency_ms,
+                                                    tai_khoan_id)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                        (cau_hoi, ngay, he_thong, tra_loi, trich_dan, latency_ms, tai_khoan_id))
         log_id = cur.fetchone()[0]
     conn.commit()
     return log_id

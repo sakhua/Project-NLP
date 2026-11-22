@@ -66,9 +66,16 @@ def _chi_muc_san_sang(conn) -> bool:
 def run(res, question: str, ngay: date | None = None, history: list[dict] | None = None,
         che_do: str = "local", hops: int | None = None, use_temporal_filter: bool = True,
         stream: bool = False, **_) -> Iterator[dict]:
-    """Phát sự kiện cùng dạng graph_rag.run (step / context / token / done)."""
+    """Phát sự kiện cùng dạng graph_rag.run (step / context / token / done).
+    ms_graphrag.ban = "goc" (mặc định): chạy bản GraphRAG gốc (pipeline/ms_graphrag_goc.py, bảng msg_*);
+    "luat": bản đã chỉnh cho luật giao thông dưới đây (bảng ms_*)."""
     cfg = res.cfg
     mc = cfg.get("ms_graphrag", {})
+    if mc.get("ban", "goc") == "goc":
+        from graphrag.pipeline import ms_graphrag_goc
+
+        yield from ms_graphrag_goc.run(res, question, ngay=ngay, history=history, che_do=che_do, stream=stream)
+        return
     ngay = ngay or date.today()
     hops = mc.get("hops", 1) if hops is None else hops
     t_start = time.perf_counter()
@@ -291,10 +298,10 @@ def _graph_payload(units: list[dict], gctx: dict, tu_tt: dict[str, str], citatio
 
 # ---------------------------------------------------------------- global search
 
-def _global(res, q, qvec, mc, step, stream, done):
+def _global(res, q, qvec, mc, step, stream, done, store=ms_store):
     t0 = time.perf_counter()
     with res.pg_pool.connection() as conn:
-        comms = ms_store.cong_dong_cho_global(conn, qvec, cap=mc.get("global_level", 0),
+        comms = store.cong_dong_cho_global(conn, qvec, cap=mc.get("global_level", 0),
                                               k=mc.get("global_top_communities", 24))
     yield step("communities", t0, f"{len(comms)} báo cáo cộng đồng cấp {mc.get('global_level', 0)} "
                "(không lọc theo ngày áp dụng)", chi_tiet=CT.ct(

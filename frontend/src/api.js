@@ -1,5 +1,11 @@
 // Mọi lời gọi tới backend nằm ở đây. Địa chỉ backend lấy từ biến VITE_API_URL lúc build.
+import { clearSession, getToken } from "./lib/auth.js";
+
 export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
+const authHeader = () => (getToken() ? { Authorization: `Bearer ${getToken()}` } : {});
+// Hết phiên hoặc chưa đăng nhập: xóa phiên để giao diện quay về trang đăng nhập
+const on401 = (res) => { if (res.status === 401 && getToken()) clearSession(); };
 
 async function request(path, { method = "GET", body, headers = {}, timeoutMs = 90000 } = {}) {
   const ctrl = new AbortController();
@@ -7,10 +13,11 @@ async function request(path, { method = "GET", body, headers = {}, timeoutMs = 9
   try {
     const res = await fetch(API_URL + path, {
       method,
-      headers: { "Content-Type": "application/json", ...headers },
+      headers: { "Content-Type": "application/json", ...authHeader(), ...headers },
       body: body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
+    on401(res);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const d = data.detail;
@@ -30,7 +37,7 @@ async function request(path, { method = "GET", body, headers = {}, timeoutMs = 9
 export async function askStream({ question, date, history, he_thong, che_do }, onEvent, signal) {
   const res = await fetch(API_URL + "/api/ask/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeader() },
     body: JSON.stringify({ question, date: date || null, history: history || [],
       he_thong: he_thong || "hybrid_graphrag", che_do: che_do || "local" }),
     signal,
@@ -39,6 +46,7 @@ export async function askStream({ question, date, history, he_thong, che_do }, o
     throw new Error("Không kết nối được backend. Kiểm tra uvicorn đã chạy chưa.");
   });
   if (!res.ok) {
+    on401(res);
     const data = await res.json().catch(() => ({}));
     const d = data.detail;
     throw new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : `Lỗi ${res.status}`);
@@ -61,6 +69,9 @@ export async function askStream({ question, date, history, he_thong, che_do }, o
 }
 
 export const api = {
+  authConfig: () => request("/api/auth/config", { timeoutMs: 90000 }),
+  login: (ten_dang_nhap, mat_khau) => request("/api/auth/login", { method: "POST", body: { ten_dang_nhap, mat_khau } }),
+  me: () => request("/api/auth/me"),
   health: () => request("/health", { timeoutMs: 10000 }),
   healthDb: () => request("/health/db", { timeoutMs: 15000 }),
   overview: () => request("/api/overview"),

@@ -11,14 +11,15 @@ import os
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from graphrag.common.config import load_config
 from graphrag.resources import Resources
 
-from .routers import admin, ask, documents, feedback, graph, system
+from .auth import require_user
+from .routers import admin, ask, auth, documents, feedback, graph, system
 
 log = logging.getLogger("graphrag")
 
@@ -68,5 +69,9 @@ def health_db(request: Request):
     return request.app.state.res.check()
 
 
-for r in (ask.router, documents.router, graph.router, feedback.router, admin.router, system.router):
+# Hỏi đáp, tra cứu, đồ thị, đánh giá: bắt buộc đăng nhập Google khi đã đặt GOOGLE_CLIENT_ID (xem auth.py)
+for r in (ask.router, documents.router, graph.router, feedback.router):
+    app.include_router(r, prefix="/api", dependencies=[Depends(require_user)])
+# Đăng nhập, thống kê công khai (thanh bên), quản trị (mật khẩu riêng)
+for r in (auth.router, admin.router, system.router):
     app.include_router(r, prefix="/api")

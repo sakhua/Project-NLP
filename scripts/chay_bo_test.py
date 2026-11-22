@@ -50,7 +50,7 @@ from graphrag.evaluation.metrics import (answer_relevance_khong_llm, f2_at_k, fa
 KS = (5, 10, 40)
 TEN_LOAI = {"don": "Đơn", "multi_hop": "Multi-hop", "hieu_luc": "Hiệu lực", "so_sanh": "So sánh"}
 TEN_HT = {"hybrid_graphrag": "Hybrid GraphRAG (đề xuất)", "hybrid_rag": "Hybrid RAG (B1)",
-          "ms_graphrag": "GraphRAG kiểu Microsoft (B2)"}
+          "ms_graphrag": "GraphRAG Microsoft gốc (B2)"}
 NHAN_HT = {"hybrid_graphrag": "Đề xuất", "hybrid_rag": "B1", "ms_graphrag": "B2"}
 # Cột hiển thị: (khóa, tên)
 COT = ([(f"recall@{k}", f"Recall@{k}") for k in KS] + [(f"full_recall@{k}", f"Full Recall@{k}") for k in KS]

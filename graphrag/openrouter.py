@@ -1,6 +1,6 @@
 """Client gọi OpenRouter (https://openrouter.ai) cho cả 3 loại mô hình qua một API key:
 
-  chat       POST /api/v1/chat/completions   – sinh câu trả lời, LLM-judge (vd. openai/gpt-4o-mini)
+  chat       POST /api/v1/chat/completions   – sinh câu trả lời, dựng chỉ mục GraphRAG (vd. openai/gpt-6-luna)
   embeddings POST /api/v1/embeddings         – mã hóa văn bản (vd. baai/bge-m3, 1024 chiều)
   rerank     POST /api/v1/rerank             – xếp hạng lại (vd. cohere/rerank-v3.5)
 
@@ -46,6 +46,14 @@ def la_loi_tai_khoan(e: Exception) -> bool:
     return "insufficient_quota" in msg or "key limit exceeded" in msg or "insufficient credits" in msg
 
 
+def _loi_tham_so(e: "OpenRouterError", ten: str) -> bool:
+    """Lỗi 400 vì mô hình không nhận một tham số (vd. temperature với mô hình suy luận)."""
+    msg = str(e).lower()
+    return getattr(e, "status", None) == 400 and ten in msg and any(
+        t in msg for t in ("unsupported", "not supported", "does not support", "only the default", "unrecognized",
+                           "invalid"))
+
+
 class OpenRouter:
     def __init__(self, api_key: str, timeout: float = 60.0, max_retries: int = 3, app_name: str = "GraphRAG luat GTDB",
                  transport: httpx.BaseTransport | None = None, base_url: str = BASE_URL, ten: str = "openrouter"):
@@ -59,6 +67,9 @@ class OpenRouter:
         )
         self.max_retries = max_retries
         self.backoff = 1.0
+        self.bo_tham_so: dict[str, set[str]] = {}     # mô hình → tham số đã bị từ chối (không gửi nữa)
+        self.usage = {"prompt": 0, "cached": 0, "completion": 0, "reasoning": 0, "calls": 0}
+        self._ulock = threading.Lock()
 
     def _post(self, path: str, body: dict) -> dict:
         for attempt in range(self.max_retries + 1):
@@ -71,21 +82,69 @@ class OpenRouter:
             return r.json()
         raise OpenRouterError(f"{path}: hết số lần thử lại")
 
-    def chat(self, model: str, system: str, user: str, temperature: float = 0.0, max_tokens: int | None = None) -> str:
-        body = {"model": model, "temperature": temperature,
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    def _body(self, model: str, messages: list[dict], temperature, max_tokens, reasoning_effort) -> dict:
+        """OpenAI: max_completion_tokens, reasoning_effort. OpenRouter: max_tokens, reasoning.effort.
+        Tham số mô hình đã từ chối một lần (vd. temperature ở mô hình suy luận) thì không gửi nữa."""
+        bo = self.bo_tham_so.get(model, set())
+        body: dict = {"model": model, "messages": messages}
+        if temperature is not None and "temperature" not in bo:
+            body["temperature"] = temperature
         if max_tokens:
-            body["max_tokens"] = max_tokens
-        data = self._post("/chat/completions", body)
-        return data["choices"][0]["message"]["content"] or ""
+            body["max_completion_tokens" if self.ten == "openai" else "max_tokens"] = max_tokens
+        if reasoning_effort and "reasoning" not in bo:
+            if self.ten == "openai":
+                body["reasoning_effort"] = reasoning_effort
+            else:
+                body["reasoning"] = {"effort": reasoning_effort}
+        return body
 
-    def chat_stream(self, model: str, system: str, user: str, temperature: float = 0.0,
-                    max_tokens: int | None = None) -> Iterator[str]:
+    def _ghi_usage(self, u: dict | None) -> None:
+        if not u:
+            return
+        with self._ulock:
+            self.usage["calls"] += 1
+            self.usage["prompt"] += u.get("prompt_tokens") or 0
+            self.usage["completion"] += u.get("completion_tokens") or 0
+            self.usage["cached"] += (u.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
+            self.usage["reasoning"] += (u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
+
+    def _thu_bo_tham_so(self, model: str, e: "OpenRouterError", body: dict) -> bool:
+        """Nếu lỗi do tham số không được hỗ trợ: ghi nhớ, bỏ tham số đó và báo gọi lại."""
+        for ten, khoa in (("temperature", ("temperature",)), ("reasoning", ("reasoning_effort", "reasoning"))):
+            if any(k in body for k in khoa) and _loi_tham_so(e, ten):
+                self.bo_tham_so.setdefault(model, set()).add(ten)
+                print(f"[LLM] {self.ten}/{model} không nhận tham số {ten}: bỏ tham số này.", file=sys.stderr)
+                return True
+        return False
+
+    def chat_messages(self, model: str, messages: list[dict], temperature: float | None = 0.0,
+                      max_tokens: int | None = None, reasoning_effort: str | None = None) -> str:
+        """Gọi chat với danh sách tin nhắn tùy ý (hội thoại nhiều lượt, vd. bước gleaning của GraphRAG gốc)."""
+        for _ in range(3):
+            body = self._body(model, messages, temperature, max_tokens, reasoning_effort)
+            try:
+                data = self._post("/chat/completions", body)
+            except OpenRouterError as e:
+                if self._thu_bo_tham_so(model, e, body):
+                    continue
+                raise
+            self._ghi_usage(data.get("usage"))
+            return data["choices"][0]["message"].get("content") or ""
+        raise OpenRouterError(f"[{self.ten}] {model}: không gọi được sau khi bỏ các tham số không hỗ trợ")
+
+    def chat(self, model: str, system: str, user: str, temperature: float | None = 0.0, max_tokens: int | None = None,
+             reasoning_effort: str | None = None) -> str:
+        msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": user}]
+        return self.chat_messages(model, msgs, temperature, max_tokens, reasoning_effort)
+
+    def chat_stream(self, model: str, system: str, user: str, temperature: float | None = 0.0,
+                    max_tokens: int | None = None, reasoning_effort: str | None = None) -> Iterator[str]:
         """Như chat() nhưng trả về từng đoạn chữ ngay khi mô hình sinh ra (giao diện hiện chữ chạy dần)."""
-        body = {"model": model, "temperature": temperature, "stream": True,
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
-        if max_tokens:
-            body["max_tokens"] = max_tokens
+        msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": user}]
+        body = self._body(model, msgs, temperature, max_tokens, reasoning_effort)
+        body["stream"] = True
+        if self.ten == "openai":
+            body["stream_options"] = {"include_usage": True}
         for attempt in range(self.max_retries + 1):
             with self.http.stream("POST", "/chat/completions", json=body) as r:
                 if r.status_code >= 400:
@@ -93,8 +152,13 @@ class OpenRouter:
                     if r.status_code in RETRY_STATUS and attempt < self.max_retries and "insufficient_quota" not in noi_dung:
                         time.sleep(self.backoff * 2 ** attempt)
                         continue
-                    raise OpenRouterError(f"[{self.ten}] /chat/completions lỗi {r.status_code}: {noi_dung[:300]}",
-                                          r.status_code)
+                    e = OpenRouterError(f"[{self.ten}] /chat/completions lỗi {r.status_code}: {noi_dung[:300]}",
+                                        r.status_code)
+                    if attempt < self.max_retries and self._thu_bo_tham_so(body["model"], e, body):
+                        keep = {k: body[k] for k in ("stream", "stream_options") if k in body}
+                        body = {**self._body(model, msgs, temperature, max_tokens, reasoning_effort), **keep}
+                        continue
+                    raise e
                 for line in r.iter_lines():
                     if not line.startswith("data:"):
                         continue                  # dòng trống hoặc chú thích ": OPENROUTER PROCESSING"
@@ -107,7 +171,9 @@ class OpenRouter:
                         code = err.get("code") if isinstance(err, dict) else None
                         raise OpenRouterError(f"[{self.ten}] /chat/completions lỗi: {err}",
                                               code if isinstance(code, int) else None)
-                    delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
+                    if chunk.get("usage"):
+                        self._ghi_usage(chunk["usage"])
+                    delta = ((chunk.get("choices") or [{}])[0].get("delta") or {}).get("content")
                     if delta:
                         yield delta
                 return
@@ -183,15 +249,26 @@ class DuPhong:
                 loi = e
         raise loi or OpenRouterError(f"Hết khóa dùng được cho {model}", 403)
 
-    def chat(self, model, system, user, temperature=0.0, max_tokens=None) -> str:
-        return self._goi(model, lambda c, m: c.chat(m, system, user, temperature, max_tokens))
+    def chat(self, model, system, user, temperature=0.0, max_tokens=None, reasoning_effort=None) -> str:
+        return self._goi(model, lambda c, m: c.chat(m, system, user, temperature, max_tokens, reasoning_effort))
 
-    def chat_stream(self, model, system, user, temperature=0.0, max_tokens=None) -> Iterator[str]:
+    def chat_messages(self, model, messages, temperature=0.0, max_tokens=None, reasoning_effort=None) -> str:
+        return self._goi(model, lambda c, m: c.chat_messages(m, messages, temperature, max_tokens, reasoning_effort))
+
+    @property
+    def usage(self) -> dict:
+        tong = {"prompt": 0, "cached": 0, "completion": 0, "reasoning": 0, "calls": 0}
+        for c in self.clients:
+            for k in tong:
+                tong[k] += c.usage.get(k, 0)
+        return tong
+
+    def chat_stream(self, model, system, user, temperature=0.0, max_tokens=None, reasoning_effort=None) -> Iterator[str]:
         loi = None
         for c, m in self._ung_vien(model):
             da_ra = False
             try:
-                for d in c.chat_stream(m, system, user, temperature, max_tokens):
+                for d in c.chat_stream(m, system, user, temperature, max_tokens, reasoning_effort):
                     da_ra = True
                     yield d
                 with self._lock:

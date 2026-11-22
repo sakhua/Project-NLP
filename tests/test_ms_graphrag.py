@@ -155,7 +155,9 @@ def res(monkeypatch):
     monkeypatch.setattr(pg, "latest_versions", lambda conn, ids: {u["id"]: u for u in units if u["id"] in ids})
     emb = SimpleNamespace(encode_queries=lambda t: np.zeros((1, 4)))
     bm25 = SimpleNamespace(search=lambda *a, **k: pytest.fail("B2 không được dùng BM25"))
-    return SimpleNamespace(cfg=load_config("local"), embedder=emb, llm=FakeLLM(), pg_pool=FakePool(), bm25=bm25)
+    cfg = load_config("local")
+    cfg["ms_graphrag"]["ban"] = "luat"      # các kiểm thử dưới đây dành cho bản đã chỉnh cho luật (bảng ms_*)
+    return SimpleNamespace(cfg=cfg, embedder=emb, llm=FakeLLM(), pg_pool=FakePool(), bm25=bm25)
 
 
 def test_local_search(res):

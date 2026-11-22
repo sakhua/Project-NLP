@@ -26,7 +26,7 @@ Luồng trả lời: (1) BM25 + vector, gộp RRF, rerank → (2) Neo4j mở r�
 |---|---|---|
 | Embedding | `baai/bge-m3` (1024 chiều, cột `don_vi.embedding`) | chạy bge-m3 trên máy: `embedding.provider: local` |
 | Rerank | `cohere/rerank-v3.5` | `cohere/rerank-4-fast`, `qwen/qwen3-reranker-4b`, `voyageai/rerank-2.5` |
-| Sinh câu trả lời | `openai/gpt-4o-mini` | bất kỳ mô hình chat nào trên OpenRouter |
+| Sinh câu trả lời, dựng chỉ mục B2 | `openai/gpt-6-luna` | bất kỳ mô hình chat nào trên OpenAI/OpenRouter (thử bằng `scripts/thu_mo_hinh.py`) |
 | LLM-judge (đánh giá) | `openai/gpt-4o` | nên mạnh hơn mô hình sinh câu trả lời |
 
 Một khóa `OPENROUTER_API_KEY` cho cả ba loại; nên đặt hạn mức chi tiêu (credit limit) cho khóa.
@@ -82,7 +82,7 @@ graphrag-luat-giao-thong/
 ├── .github/workflows/ci.yml   # GitHub Actions: chạy test + build frontend mỗi lần push
 ├── render.yaml                # Render Blueprint (tùy chọn, tạo nhanh 2 dịch vụ)
 ├── pyproject.toml             # gói graphrag + nhóm thư viện: api, ml, parse, eval, demo, dev
-├── requirements.txt           # cài đầy đủ cho máy nhóm
+├── requirements.txt           # cài cho máy nhóm (không gồm torch)
 ├── .env.example               # mẫu biến môi trường local
 └── .env.cloud.example         # mẫu biến môi trường cloud
 ```

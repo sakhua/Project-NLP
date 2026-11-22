@@ -17,17 +17,19 @@ from fastapi.responses import StreamingResponse
 from graphrag.pipeline import he_thong as ht
 from graphrag.storage import postgres
 
+from ..auth import require_user
 from ..deps import get_res
 from ..schemas import AskRequest, AskResponse
 
 router = APIRouter(tags=["hỏi đáp"])
 
 
-def _log(res, question: str, ngay: date, out: dict, latency_ms: int) -> int | None:
+def _log(res, question: str, ngay: date, out: dict, latency_ms: int, user: dict | None = None) -> int | None:
     try:  # ghi nhật ký không được làm hỏng câu trả lời
         ma = ht.HE_THONG.get(out.get("he_thong", ht.MAC_DINH), {}).get("ma", "GRAPH")
         with res.pg_pool.connection() as conn:
-            return postgres.log_question(conn, question, ngay, ma, out["answer"], out["citations"], latency_ms)
+            return postgres.log_question(conn, question, ngay, ma, out["answer"], out["citations"], latency_ms,
+                                         tai_khoan_id=user["id"] if user else None)
     except Exception:  # noqa: BLE001
         return None
 
@@ -44,18 +46,18 @@ def friendly_error(e: Exception) -> str:
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask(body: AskRequest, res=Depends(get_res)):
+def ask(body: AskRequest, res=Depends(get_res), user=Depends(require_user)):
     ngay = body.date or date.today()
     t0 = time.perf_counter()
     out = ht.answer(res, body.question, he_thong=body.he_thong, che_do=body.che_do, ngay=ngay,
                     history=[h.model_dump() for h in body.history])
     latency_ms = int((time.perf_counter() - t0) * 1000)
-    return AskResponse(log_id=_log(res, body.question, ngay, out, latency_ms), latency_ms=latency_ms,
+    return AskResponse(log_id=_log(res, body.question, ngay, out, latency_ms, user), latency_ms=latency_ms,
                        **{k: v for k, v in out.items() if k in AskResponse.model_fields and k != "latency_ms"})
 
 
 @router.post("/ask/stream")
-def ask_stream(body: AskRequest, res=Depends(get_res)):
+def ask_stream(body: AskRequest, res=Depends(get_res), user=Depends(require_user)):
     ngay = body.date or date.today()
     history = [h.model_dump() for h in body.history]
 
@@ -66,7 +68,7 @@ def ask_stream(body: AskRequest, res=Depends(get_res)):
                              history=history, stream=True):
                 if ev["type"] == "done":
                     ev["latency_ms"] = int((time.perf_counter() - t0) * 1000)
-                    ev["log_id"] = _log(res, body.question, ngay, ev, ev["latency_ms"])
+                    ev["log_id"] = _log(res, body.question, ngay, ev, ev["latency_ms"], user)
                 yield json.dumps(ev, ensure_ascii=False, default=str) + "\n"
         except Exception as e:  # noqa: BLE001
             yield json.dumps({"type": "error", "message": friendly_error(e)}, ensure_ascii=False) + "\n"
